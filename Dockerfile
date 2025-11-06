@@ -29,6 +29,6 @@ VOLUME ["/app/logs/"]
 # Set environment variables if necessary
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Run the app
+# Run the API server
 ENTRYPOINT ["python3"]
-CMD ["app.py"]
+CMD ["api.py", "-a", "0.0.0.0", "-p", "6969"]
