@@ -4,31 +4,38 @@ FROM python:3.10-bullseye
 # Expose the required port
 EXPOSE 6969
 
-# Set up working directory
-WORKDIR /app
-
 # Install system dependencies, clean up cache to keep image size small
 RUN apt update && \
     apt install -y -qq ffmpeg && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
-# Copy application files into the container
-COPY . .
+# Create python symlink for consistency with GPT-SoVITS
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
-# Create a virtual environment in the app directory and install dependencies
-RUN python3 -m venv /app/.venv && \
-    . /app/.venv/bin/activate && \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir python-ffmpeg && \
-    pip install --no-cache-dir torch==2.7.1 torchvision torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 && \
-    if [ -f "requirements.txt" ]; then pip install --no-cache-dir -r requirements.txt; fi
+# Set working directory
+WORKDIR /workspace
 
-# Define volumes for persistent storage
-VOLUME ["/app/logs/"]
+# Create Applio directory (will be mounted via volumes)
+RUN mkdir -p /workspace/Applio
 
-# Set environment variables if necessary
-ENV PATH="/app/.venv/bin:$PATH"
+# Set working directory to Applio
+WORKDIR /workspace/Applio
 
-# Run the API server
-ENTRYPOINT ["python3"]
-CMD ["api.py", "-a", "0.0.0.0", "-p", "6969"]
+# Copy requirements.txt for dependency installation
+COPY requirements.txt /tmp/requirements.txt
+
+# Install PyTorch with CUDA 12.8 support first
+RUN pip install --no-cache-dir \
+    torch==2.7.1 \
+    torchvision \
+    torchaudio==2.7.1 \
+    --index-url https://download.pytorch.org/whl/cu128
+
+# Install python-ffmpeg
+RUN pip install --no-cache-dir python-ffmpeg
+
+# Install Applio dependencies from requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Run the API server (no ENTRYPOINT, command specified in docker-compose)
+# CMD ["python", "api.py", "-a", "0.0.0.0", "-p", "6969"]
