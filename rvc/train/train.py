@@ -5,6 +5,7 @@ os.environ["USE_LIBUV"] = "0" if sys.platform == "win32" else "1"
 import datetime
 import glob
 import json
+import re
 from collections import deque
 from distutils.util import strtobool
 from random import randint, shuffle
@@ -575,7 +576,7 @@ def run(
             sid.to(device),
         )
 
-    for epoch in range(epoch_str, total_epoch + 1):
+    for epoch in range(epoch_str, custom_total_epoch + 1):
         train_and_evaluate(
             rank,
             epoch,
@@ -596,7 +597,6 @@ def run(
 
         scheduler_g.step()
         scheduler_d.step()
-
 
 def train_and_evaluate(
     rank,
@@ -759,7 +759,7 @@ def train_and_evaluate(
             if loss_gen_all < lowest_value["value"]:
                 lowest_value = {
                     "step": global_step,
-                    "value": loss_gen_all,
+                    "value": loss_gen_all.item() if isinstance(loss_gen_all, torch.Tensor) else float(loss_gen_all),
                     "epoch": epoch,
                 }
             optim_g.zero_grad()
@@ -951,6 +951,7 @@ def train_and_evaluate(
                     smoothed_loss_disc_history,
                     loss_gen_history,
                     smoothed_loss_gen_history,
+                    lowest_value,
                 )
 
             if (
@@ -1070,6 +1071,43 @@ def train_and_evaluate(
                     )
 
         if done:
+            # Update training_data.json with final best checkpoint
+            print(f"[Training Complete] Updating training_data.json with final best checkpoint...")
+            training_data_path = os.path.join(experiment_dir, "training_data.json")
+
+            # Find the actual remaining best_epoch.pth file
+            final_best_files = glob.glob(os.path.join(experiment_dir, f"{model_name}_*_best_epoch.pth"))
+
+            if final_best_files:
+                final_best = os.path.basename(final_best_files[0])
+                print(f"[Training Complete] Found final best checkpoint: {final_best}")
+                match = re.match(rf"{re.escape(model_name)}_(\d+)e_(\d+)s_best_epoch\.pth", final_best)
+
+                if match:
+                    final_epoch = int(match.group(1))
+                    final_step = int(match.group(2))
+                    print(f"[Training Complete] Extracted epoch={final_epoch}, step={final_step}")
+
+                    try:
+                        with open(training_data_path, 'r') as f:
+                            existing_data = json.load(f)
+
+                        print(f"[Training Complete] Original lowest_value: epoch={existing_data['lowest_value']['epoch']}, step={existing_data['lowest_value']['step']}")
+
+                        existing_data["lowest_value"]["epoch"] = final_epoch
+                        existing_data["lowest_value"]["step"] = final_step
+
+                        with open(training_data_path, 'w') as f:
+                            json.dump(existing_data, f)
+
+                        print(f"[Training Complete] Updated lowest_value to: epoch={final_epoch}, step={final_step}")
+                    except Exception as e:
+                        print(f"[Training Complete] ERROR updating training_data.json: {str(e)}")
+                else:
+                    print(f"[Training Complete] ERROR: Filename pattern did not match: {final_best}")
+            else:
+                print(f"[Training Complete] ERROR: No *_best_epoch.pth files found in {experiment_dir}")
+
             # Clean-up process IDs from config.json
             pid_file_path = os.path.join(experiment_dir, "config.json")
             with open(pid_file_path, "r") as pid_file:
@@ -1130,6 +1168,7 @@ def save_to_json(
     smoothed_loss_disc_history,
     loss_gen_history,
     smoothed_loss_gen_history,
+    lowest_value_data=None,
 ):
     """
     Save the training history to a JSON file.
@@ -1140,6 +1179,8 @@ def save_to_json(
         "loss_gen_history": loss_gen_history,
         "smoothed_loss_gen_history": smoothed_loss_gen_history,
     }
+    if lowest_value_data:
+        data["lowest_value"] = lowest_value_data
     with open(file_path, "w") as f:
         json.dump(data, f)
 

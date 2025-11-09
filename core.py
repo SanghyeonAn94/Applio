@@ -10,7 +10,7 @@ now_dir = os.getcwd()
 sys.path.append(now_dir)
 
 current_script_directory = os.path.dirname(os.path.realpath(__file__))
-logs_path = os.path.join(current_script_directory, "logs")
+logs_path = "/workspace/Applio/logs"
 
 from rvc.lib.tools.prerequisites_download import prequisites_download_pipeline
 from rvc.train.process.model_blender import model_blender
@@ -552,7 +552,61 @@ def run_train_script(
     ]
     subprocess.run(command)
     run_index_script(model_name, index_algorithm)
-    return f"Model {model_name} trained successfully."
+
+    best_epoch_info = _find_best_checkpoint(model_name)
+
+    if best_epoch_info:
+        return f"Model {model_name} trained successfully. Best epoch: {best_epoch_info['epoch']}, Loss: {best_epoch_info['loss']:.3f}"
+    else:
+        return f"Model {model_name} trained successfully."
+
+
+def _find_best_checkpoint(model_name: str):
+    """
+    Find the best checkpoint based on lowest loss value from training_data.json.
+
+    Returns:
+        dict with 'epoch', 'step', 'loss', 'model_path' or None if not found
+    """
+    import json
+
+    experiment_dir = os.path.join(logs_path, model_name)
+    training_data_file = os.path.join(experiment_dir, "training_data.json")
+
+    if not os.path.exists(training_data_file):
+        print(f"Training data file not found: {training_data_file}")
+        return None
+
+    try:
+        with open(training_data_file, 'r') as f:
+            training_data = json.load(f)
+
+        lowest_value = training_data.get('lowest_value')
+        if not lowest_value:
+            print("No lowest_value found in training data")
+            return None
+
+        best_epoch = lowest_value.get('epoch')
+        best_step = lowest_value.get('step')
+        best_loss = lowest_value.get('value')
+
+        checkpoint_pattern = f"{model_name}_{best_epoch}e_{best_step}s_best_epoch.pth"
+        checkpoint_path = os.path.join(experiment_dir, checkpoint_pattern)
+
+        if os.path.exists(checkpoint_path):
+            return {
+                'epoch': best_epoch,
+                'step': best_step,
+                'loss': best_loss,
+                'model_path': checkpoint_path
+            }
+        else:
+            print(f"Best checkpoint not found: {checkpoint_path}")
+            return None
+
+    except Exception as e:
+        print(f"Error reading training data: {e}")
+        return None
 
 
 # Index
