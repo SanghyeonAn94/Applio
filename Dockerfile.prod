@@ -65,6 +65,11 @@ RUN pip install --no-cache-dir -r /tmp/applio-requirements.txt
 # Create cache storage directory (shared with ML Service)
 RUN mkdir -p /app/shared/cache_storage
 
+# Copy mute directories to /tmp for later restoration
+COPY logs/mute /tmp/mute
+COPY logs/mute_spin /tmp/mute_spin
+COPY logs/mute_spin-v2 /tmp/mute_spin-v2
+
 # Expose API port
 EXPOSE 6969
 
@@ -115,14 +120,14 @@ fi\n\
 if [ ! -d "$MODEL_DIR/logs/mute" ]; then\n\
   echo ""\n\
   echo "Initializing mute directories..."\n\
-  # Check if mute directories are in the downloaded files\n\
-  if [ -d "$MODEL_DIR/logs/mute" ] || [ -d "/tmp/mute" ]; then\n\
-    cp -r "$MODEL_DIR"/logs/mute* "$MODEL_DIR/logs/" 2>/dev/null || \\\n\
-    cp -r /tmp/mute* "$MODEL_DIR/logs/" 2>/dev/null || \\\n\
-    mkdir -p "$MODEL_DIR/logs/mute" "$MODEL_DIR/logs/mute_spin" "$MODEL_DIR/logs/mute_spin-v2"\n\
-    echo "✓ Mute directories initialized"\n\
+  mkdir -p "$MODEL_DIR/logs"\n\
+  if [ -d "/tmp/mute" ]; then\n\
+    cp -r /tmp/mute "$MODEL_DIR/logs/"\n\
+    cp -r /tmp/mute_spin "$MODEL_DIR/logs/"\n\
+    cp -r /tmp/mute_spin-v2 "$MODEL_DIR/logs/"\n\
+    echo "✓ Mute directories initialized from image backup"\n\
   else\n\
-    echo "⚠ Warning: Mute directories not found, creating empty ones"\n\
+    echo "⚠ Warning: Mute directories not found in image, creating empty ones"\n\
     mkdir -p "$MODEL_DIR/logs/mute" "$MODEL_DIR/logs/mute_spin" "$MODEL_DIR/logs/mute_spin-v2"\n\
   fi\n\
 fi\n\
