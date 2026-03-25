@@ -599,9 +599,9 @@ async def train_model(request: TrainRequest):
 
         return TrainingResponse(
             success=True,
-            message=result["message"],
+            message=result if isinstance(result, str) else result.get("message", ""),
             processing_time_ms=processing_time,
-            f0=result.get("f0")
+            f0=result.get("f0") if isinstance(result, dict) else None
         )
 
     except Exception as e:
