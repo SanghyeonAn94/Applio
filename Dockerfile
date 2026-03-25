@@ -1,35 +1,50 @@
 # syntax=docker/dockerfile:1
-FROM python:3.10-bullseye
+FROM python:3.12-bookworm
 
 # Expose the required port
 EXPOSE 6969
 
-# Set up working directory
-WORKDIR /app
-
-# Install system dependencies, clean up cache to keep image size small
+# Install system dependencies
 RUN apt update && \
-    apt install -y -qq ffmpeg && \
-    apt install -y -qq libportaudio2 && \
+    apt install -y -qq ffmpeg libportaudio2 && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
-# Copy application files into the container
-COPY . .
+# Copy requirements.txt for dependency installation
+COPY requirements.txt /tmp/requirements.txt
 
-# Create a virtual environment in the app directory and install dependencies
-RUN python3 -m venv /app/.venv && \
-    . /app/.venv/bin/activate && \
-    pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir python-ffmpeg && \
-    pip install --no-cache-dir torch==2.7.1 torchvision torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 && \
-    if [ -f "requirements.txt" ]; then pip install --no-cache-dir -r requirements.txt; fi
+# Install typing-extensions first from PyPI to avoid naming conflict
+RUN pip install --no-cache-dir typing-extensions>=4.10.0
 
-# Define volumes for persistent storage
-VOLUME ["/app/logs/"]
+# Install PyTorch with CUDA 12.8 support
+RUN pip install --no-cache-dir \
+    torch==2.7.1 \
+    torchvision==0.22.1 \
+    torchaudio==2.7.1 \
+    --index-url https://download.pytorch.org/whl/cu128
 
-# Set environment variables if necessary
-ENV PATH="/app/.venv/bin:$PATH"
+# Install python-ffmpeg
+RUN pip install --no-cache-dir python-ffmpeg
 
-# Run the app
-ENTRYPOINT ["python3"]
-CMD ["app.py"]
+# Install Applio dependencies from requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Set working directory
+WORKDIR /workspace/Applio
+
+# Copy Applio source code
+COPY . /workspace/Applio
+
+# Backup mute directories (will be restored if volume mount is empty)
+RUN cp -r /workspace/Applio/logs/mute* /tmp/ 2>/dev/null || true
+
+# Create entrypoint script to restore mute files if needed
+RUN echo '#!/bin/bash\n\
+# Restore mute directories if they do not exist in mounted volume\n\
+if [ ! -d "/workspace/Applio/logs/mute" ]; then\n\
+  echo "Initializing mute directories..."\n\
+  cp -r /tmp/mute* /workspace/Applio/logs/ 2>/dev/null || true\n\
+  echo "Mute directories initialized"\n\
+fi\n\
+exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
