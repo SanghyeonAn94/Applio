@@ -345,6 +345,12 @@ async def infer(request: InferenceRequest):
             sid=0,
         )
 
+        # Wait for output file (disk I/O may lag under heavy load)
+        for _retry in range(10):
+            if os.path.exists(request.output_path):
+                break
+            await asyncio.sleep(0.5)
+
         if not os.path.exists(request.output_path):
             return InferenceResponse(
                 success=False,
