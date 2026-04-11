@@ -1,0 +1,67 @@
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APPLIO_BASE_DIR=/app/Applio \
+    APPLIO_VOLUME_PATH=/runpod-volume/applio \
+    APPLIO_WORK_ROOT=/tmp/work \
+    APPLIO_MODEL_REGISTRY_S3=s3://shiftup-enterprise-ai-service/voice/model_registry/Applio \
+    AWS_DEFAULT_REGION=ap-northeast-2
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common ca-certificates && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        python3.12 python3.12-dev python3.12-venv \
+        git wget curl ffmpeg libsndfile1 libportaudio2 build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+
+RUN pip install --no-cache-dir typing-extensions>=4.10.0
+
+RUN pip install --no-cache-dir \
+        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
+        --index-url https://download.pytorch.org/whl/cu128
+
+RUN pip install --no-cache-dir python-ffmpeg
+
+WORKDIR /app/Applio
+
+COPY requirements.txt /tmp/applio-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/applio-requirements.txt
+
+RUN pip install --no-cache-dir boto3 httpx runpod
+
+COPY logs/mute /tmp/mute
+COPY logs/mute_spin /tmp/mute_spin
+COPY logs/mute_spin-v2 /tmp/mute_spin-v2
+
+COPY . /app/Applio
+
+RUN echo '#!/bin/bash\n\
+set -e\n\
+cd /app/Applio\n\
+\n\
+VOL=/runpod-volume/applio\n\
+\n\
+if [ -d "$VOL/rvc_models" ]; then\n\
+    rm -rf rvc/models\n\
+    ln -sfn "$VOL/rvc_models" rvc/models\n\
+fi\n\
+\n\
+mkdir -p logs\n\
+if [ ! -d "logs/mute" ]; then cp -r /tmp/mute logs/mute; fi\n\
+if [ ! -d "logs/mute_spin" ]; then cp -r /tmp/mute_spin logs/mute_spin; fi\n\
+if [ ! -d "logs/mute_spin-v2" ]; then cp -r /tmp/mute_spin-v2 logs/mute_spin-v2; fi\n\
+\n\
+mkdir -p "$APPLIO_WORK_ROOT"\n\
+\n\
+exec "$@"\n\
+' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "-u", "-m", "app.handler"]

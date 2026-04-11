@@ -1,0 +1,39 @@
+.git
+.github
+.vscode
+.idea
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# RVC base weights live on the Network Volume; never bake them in.
+rvc/models/embedders
+rvc/models/pretraineds
+rvc/models/predictors
+rvc/models/formant
+
+# Per-character training outputs live in logs/<model_name>/. Only the
+# ``mute*`` directories are special — the Dockerfile COPYs those explicitly.
+logs/*
+!logs/mute
+!logs/mute_spin
+!logs/mute_spin-v2
+
+# Legacy container assets that the RunPod image does not need.
+Dockerfile
+Dockerfile.prod
+docker-compose.yaml
+buildspec.yml
+
+assets/audios
+assets/weights
+assets/presence
+output
+env
+.env
+.venv
