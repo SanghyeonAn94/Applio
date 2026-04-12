@@ -3,6 +3,7 @@
 .vscode
 .idea
 __pycache__
+rvc/models/*
 **/__pycache__
 *.pyc
 *.pyo

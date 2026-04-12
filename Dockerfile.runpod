@@ -51,6 +51,14 @@ VOL=/runpod-volume/applio\n\
 if [ -d "$VOL/rvc_models" ]; then\n\
     rm -rf rvc/models\n\
     ln -sfn "$VOL/rvc_models" rvc/models\n\
+elif [ ! -f "rvc/models/.s3_synced" ]; then\n\
+    echo "No volume, syncing rvc/models from S3..."\n\
+    python -c "\n\
+from app.s3_utils import ensure_local\n\
+import os\n\
+s3_base = os.environ.get(\"APPLIO_MODEL_REGISTRY_S3\", \"s3://shiftup-enterprise-ai-service/voice/model_registry/Applio\")\n\
+ensure_local(\"rvc/models\", f\"{s3_base}/rvc/models/\")\n\
+"\n\
 fi\n\
 \n\
 mkdir -p logs\n\
