@@ -41,16 +41,28 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 && \
 
 RUN pip install --no-cache-dir typing-extensions>=4.10.0
 
+# torch 2.8.0 is the single version every voice image installs, so the fleet
+# shares one torch/CUDA ABI (and 2.8 is the first stable series with sm_100).
+# torchvision 0.23.0 is the release paired with torch 2.8.0 — the pair must move
+# together or the compiled extensions break.
 RUN pip install --no-cache-dir \
-        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
+        torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
         --index-url https://download.pytorch.org/whl/cu128
 
 RUN pip install --no-cache-dir python-ffmpeg
 
 WORKDIR /app/Applio
 
+# Applio's requirements pin torch/torchvision/torchaudio 2.7.1+cu128 outright,
+# which would undo the install above (verified: the built image reported
+# 2.7.1+cu128 despite the pin). Strip those three lines and re-assert the fleet
+# version on the same command, so a genuine conflict fails the build loudly.
 COPY requirements.txt /tmp/applio-requirements.txt
-RUN pip install --no-cache-dir -r /tmp/applio-requirements.txt
+RUN grep -vE "^(torch|torchvision|torchaudio)==" /tmp/applio-requirements.txt \
+        > /tmp/applio-req.runtime.txt && \
+    pip install --no-cache-dir -r /tmp/applio-req.runtime.txt \
+        torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+        --extra-index-url https://download.pytorch.org/whl/cu128
 
 RUN pip install --no-cache-dir boto3 httpx runpod
 

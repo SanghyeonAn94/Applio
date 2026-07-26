@@ -15,11 +15,14 @@ COPY requirements.txt /tmp/requirements.txt
 # Install typing-extensions first from PyPI to avoid naming conflict
 RUN pip install --no-cache-dir typing-extensions>=4.10.0
 
-# Install PyTorch with CUDA 12.8 support
+# Install PyTorch with CUDA 12.8 support. 2.8.0 is the version shared by every
+# voice image so the fleet runs one torch/CUDA ABI (and it is the first stable
+# series supporting sm_100). torchvision 0.23.0 is the release paired with
+# torch 2.8.0 — the pair must move together or the extension ABI breaks.
 RUN pip install --no-cache-dir \
-    torch==2.7.1 \
-    torchvision==0.22.1 \
-    torchaudio==2.7.1 \
+    torch==2.8.0 \
+    torchvision==0.23.0 \
+    torchaudio==2.8.0 \
     --index-url https://download.pytorch.org/whl/cu128
 
 # Install python-ffmpeg
