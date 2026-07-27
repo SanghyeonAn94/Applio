@@ -15,6 +15,7 @@ so the client can poll ``/status`` for a live stage read.
 import glob
 import logging
 import os
+import pathlib
 import shutil
 import sys
 import threading
@@ -29,7 +30,12 @@ import runpod
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-APPLIO_BASE_DIR = os.environ.get("APPLIO_BASE_DIR", "/app/Applio")
+# Default follows the code instead of naming a fixed image path, so it stays
+# correct wherever the checkout is installed (/srv/applio, /app/Applio, a dev
+# clone). app/train_handler.py -> parents[1] is the Applio repo root.
+_REPO_ROOT = str(pathlib.Path(__file__).resolve().parents[1])
+
+APPLIO_BASE_DIR = os.environ.get("APPLIO_BASE_DIR", _REPO_ROOT)
 APPLIO_VOLUME_PATH = os.environ.get("APPLIO_VOLUME_PATH", "/runpod-volume/applio")
 WORK_ROOT = os.environ.get("APPLIO_WORK_ROOT", "/tmp/work")
 MODEL_REGISTRY_S3 = os.environ.get(

@@ -16,28 +16,40 @@ RUN aws s3 sync "${APPLIO_MODEL_REGISTRY_S3}/rvc/models/" /assets/rvc_models/ &&
     echo "baked at build time" > /assets/rvc_models/.s3_synced
 
 # ── Stage 2: runtime image ───────────────────────────────────────────────
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+# The fleet's combined image (voice-multi) runs all eight voice models inside a
+# single container, so every repo has to agree on base image, interpreter and
+# venv path. A repo that brings its own Ubuntu release or its own CPython makes
+# that image ship two interpreters and two ~3GB copies of torch, for nothing.
+# ubuntu24.04 (noble) already ships python3.12, which is why the deadsnakes PPA
+# and the get-pip bootstrap below are gone.
+FROM docker.io/nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    APPLIO_BASE_DIR=/app/Applio \
+    PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    APPLIO_BASE_DIR=/srv/applio \
     APPLIO_VOLUME_PATH=/runpod-volume/applio \
     APPLIO_WORK_ROOT=/tmp/work \
     APPLIO_MODEL_REGISTRY_S3=s3://shiftup-enterprise-ai-service/voice/model_registry/Applio \
     AWS_DEFAULT_REGION=ap-northeast-2
 
+# python3.12-dev + build-essential stay because parts of the requirement set
+# still build from source on this platform.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        software-properties-common ca-certificates && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
         python3.12 python3.12-dev python3.12-venv \
         git wget curl ffmpeg libsndfile1 libportaudio2 build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+# Everything below installs into /opt/venv (first on PATH), the shared location
+# the combined image expects. Note that a venv does not fall back to apt's
+# /usr/lib/python3/dist-packages, so every import has to come from pip here.
+RUN python3.12 -m venv /opt/venv
+
+# python3.12 no longer seeds setuptools into a fresh venv, so bootstrap the
+# build trio before anything that needs a sdist/editable build.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir typing-extensions>=4.10.0
 
@@ -51,7 +63,14 @@ RUN pip install --no-cache-dir \
 
 RUN pip install --no-cache-dir python-ffmpeg
 
-WORKDIR /app/Applio
+# Code lives at /srv/<repo-key>, not /app: every repo in the fleet names its
+# handler package `app`, so eight repos cannot all root their code at /app in
+# the combined image. Building at the same absolute path the container runs from
+# also keeps path-sensitive installs honest and removes PYTHONPATH patch-ups.
+WORKDIR /srv/applio
+# Compat symlink: the old code root stays valid for anything (scripts, docs,
+# saved configs, external callers) that still says /app/Applio.
+RUN mkdir -p /app && ln -s /srv/applio /app/Applio
 
 # Applio's requirements pin torch/torchvision/torchaudio 2.7.1+cu128 outright,
 # which would undo the install above (verified: the built image reported
@@ -70,15 +89,15 @@ COPY logs/mute /tmp/mute
 COPY logs/mute_spin /tmp/mute_spin
 COPY logs/mute_spin-v2 /tmp/mute_spin-v2
 
-COPY . /app/Applio
+COPY . /srv/applio
 
 COPY --from=asset-fetcher /assets/rvc_models rvc/models
 
 RUN echo '#!/bin/bash\n\
 set -e\n\
-cd /app/Applio\n\
+cd "${APPLIO_BASE_DIR:-/srv/applio}"\n\
 \n\
-VOL=/runpod-volume/applio\n\
+VOL="${APPLIO_VOLUME_PATH:-/runpod-volume/applio}"\n\
 \n\
 if [ -d "$VOL/rvc_models" ]; then\n\
     rm -rf rvc/models\n\
