@@ -108,7 +108,6 @@ class PreProcess:
             if normalization_mode == "post":
                 chunk = self._normalize_audio(chunk)
             if len(chunk) == chunk_length:
-                # full SR for training
                 wavfile.write(
                     os.path.join(
                         self.gt_wavs_dir,
@@ -117,7 +116,6 @@ class PreProcess:
                     self.sr,
                     chunk.astype(np.float32),
                 )
-                # 16KHz for feature extraction
                 chunk_16k = librosa.resample(
                     chunk, orig_sr=self.sr, target_sr=SAMPLE_RATE_16K, res_type=RES_TYPE
                 )
@@ -158,7 +156,6 @@ class PreProcess:
                     y=audio, sr=self.sr, prop_decrease=reduction_strength
                 )
             if cut_preprocess == "Skip":
-                # no cutting
                 self.process_audio_segment(
                     audio,
                     sid,
@@ -167,7 +164,6 @@ class PreProcess:
                     normalization_mode,
                 )
             elif cut_preprocess == "Simple":
-                # simple
                 self.simple_cut(
                     audio,
                     sid,
@@ -178,7 +174,6 @@ class PreProcess:
                 )
             elif cut_preprocess == "Automatic":
                 idx1 = 0
-                # legacy
                 for audio_segment in self.slicer.slice(audio):
                     i = 0
                     while True:
@@ -300,7 +295,6 @@ def preprocess_training_set(
                 f'Speaker ID folder is expected to be integer, got "{os.path.basename(root)}" instead.'
             )
 
-    # print(f"Number of files: {len(files)}")
     audio_length = []
     with tqdm(total=len(files)) as pbar:
         with concurrent.futures.ProcessPoolExecutor(

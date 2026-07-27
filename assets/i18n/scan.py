@@ -33,10 +33,8 @@ def process_file(file_path):
     return []
 
 
-# Use pathlib for file handling
 py_files = Path(".").rglob("*.py")
 
-# Use a set to store unique strings
 code_keys = set()
 
 for py_file in py_files:
@@ -54,7 +52,6 @@ with open(standard_file, "r", encoding="utf-8") as file:
     standard_data = json.load(file, object_pairs_hook=OrderedDict)
 standard_keys = set(standard_data.keys())
 
-# Combine unused and missing keys sections
 unused_keys = standard_keys - code_keys
 missing_keys = code_keys - standard_keys
 
@@ -68,7 +65,6 @@ for missing_key in missing_keys:
 
 code_keys_dict = OrderedDict((s, s) for s in code_keys)
 
-# Use context manager for writing back to the file
 with open(standard_file, "w", encoding="utf-8") as file:
     json.dump(code_keys_dict, file, ensure_ascii=False, indent=4, sort_keys=True)
     file.write("\n")

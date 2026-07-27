@@ -63,7 +63,6 @@ def generate_filelist(model_path: str, sample_rate: int, include_mutes: int = 2)
         mute_f0_path = os.path.join(mute_base_path, "f0", "mute.wav.npy")
         mute_f0nsf_path = os.path.join(mute_base_path, "f0_voiced", "mute.wav.npy")
 
-        # adding x files per sid
         for sid in sids * include_mutes:
             options.append(
                 f"{mute_audio_path}|{mute_feature_path}|{mute_f0_path}|{mute_f0nsf_path}|{sid}"

@@ -1,3 +1,9 @@
+"""
+RefineGAN generator for audio synthesis: refines an input mel-spectrogram and F0
+into a waveform via downsampling, residual and parallel residual blocks, with optional
+global conditioning. Includes ResBlock, AdaIN, ParallelResBlock and SineGenerator helpers.
+"""
+
 import numpy as np
 import torch
 import torchaudio
@@ -11,20 +17,6 @@ from rvc.lib.algorithm.commons import init_weights, get_padding
 
 
 class ResBlock(nn.Module):
-    """
-    Residual block with multiple dilated convolutions.
-
-    This block applies a sequence of dilated convolutional layers with Leaky ReLU activation.
-    It's designed to capture information at different scales due to the varying dilation rates.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        kernel_size (int, optional): Kernel size for the convolutional layers. Defaults to 7.
-        dilation (tuple[int], optional): Tuple of dilation rates for the convolutional layers. Defaults to (1, 3, 5).
-        leaky_relu_slope (float, optional): Slope for the Leaky ReLU activation. Defaults to 0.2.
-    """
-
     def __init__(
         self,
         channels: int,
@@ -87,16 +79,6 @@ class ResBlock(nn.Module):
 
 
 class AdaIN(nn.Module):
-    """
-    Adaptive Instance Normalization layer.
-
-    This layer applies a scaling factor to the input based on a learnable weight.
-
-    Args:
-        channels (int): Number of input channels.
-        leaky_relu_slope (float, optional): Slope for the Leaky ReLU activation applied after scaling. Defaults to 0.2.
-    """
-
     def __init__(
         self,
         *,
@@ -106,7 +88,6 @@ class AdaIN(nn.Module):
         super().__init__()
 
         self.weight = nn.Parameter(torch.ones(channels) * 1e-4)
-        # safe to use in-place as it is used on a new x+gaussian tensor
         self.activation = nn.LeakyReLU(leaky_relu_slope)
 
     def forward(self, x: torch.Tensor):
@@ -116,17 +97,6 @@ class AdaIN(nn.Module):
 
 
 class ParallelResBlock(nn.Module):
-    """
-    Parallel residual block that applies multiple residual blocks with different kernel sizes in parallel.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        kernel_sizes (tuple[int], optional): Tuple of kernel sizes for the parallel residual blocks. Defaults to (3, 7, 11).
-        dilation (tuple[int], optional): Tuple of dilation rates for the convolutional layers within the residual blocks. Defaults to (1, 3, 5).
-        leaky_relu_slope (float, optional): Slope for the Leaky ReLU activation. Defaults to 0.2.
-    """
-
     def __init__(
         self,
         *,
@@ -178,20 +148,6 @@ class ParallelResBlock(nn.Module):
 
 
 class SineGenerator(nn.Module):
-    """
-    Definition of sine generator
-
-    Generates sine waveforms with optional harmonics and additive noise.
-    Can be used to create harmonic noise source for neural vocoders.
-
-    Args:
-        samp_rate (int): Sampling rate in Hz.
-        harmonic_num (int): Number of harmonic overtones (default 0).
-        sine_amp (float): Amplitude of sine-waveform (default 0.1).
-        noise_std (float): Standard deviation of Gaussian noise (default 0.003).
-        voiced_threshold (float): F0 threshold for voiced/unvoiced classification (default 0).
-    """
-
     def __init__(
         self,
         samp_rate,
@@ -214,27 +170,19 @@ class SineGenerator(nn.Module):
         )
 
     def _f02uv(self, f0):
-        # generate uv signal
         uv = torch.ones_like(f0)
         uv = uv * (f0 > self.voiced_threshold)
         return uv
 
     def _f02sine(self, f0_values):
-        """f0_values: (batchsize, length, dim)
-        where dim indicates fundamental tone and overtones
-        """
-        # convert to F0 in rad. The integer part n can be ignored
-        # because 2 * np.pi * n doesn't affect phase
         rad_values = (f0_values / self.sampling_rate) % 1
 
-        # initial phase noise (no noise for fundamental component)
         rand_ini = torch.rand(
             f0_values.shape[0], f0_values.shape[2], device=f0_values.device
         )
         rand_ini[:, 0] = 0
         rad_values[:, 0, :] = rad_values[:, 0, :] + rand_ini
 
-        # instantanouse phase sine[t] = sin(2*pi \sum_i=1 ^{t} rad)
         tmp_over_one = torch.cumsum(rad_values, 1) % 1
         tmp_over_one_idx = (tmp_over_one[:, 1:, :] - tmp_over_one[:, :-1, :]) < 0
         cumsum_shift = torch.zeros_like(rad_values)
@@ -247,7 +195,6 @@ class SineGenerator(nn.Module):
     def forward(self, f0):
         with torch.no_grad():
             f0_buf = torch.zeros(f0.shape[0], f0.shape[1], self.dim, device=f0.device)
-            # fundamental component
             f0_buf[:, :, 0] = f0[:, :, 0]
             for idx in np.arange(self.harmonic_num):
                 f0_buf[:, :, idx + 1] = f0_buf[:, :, 0] * (idx + 2)
@@ -261,38 +208,19 @@ class SineGenerator(nn.Module):
 
             sine_waves = sine_waves * uv + noise
 
-        # merge with grad
         return self.merge(sine_waves)
 
 
 class RefineGANGenerator(nn.Module):
-    """
-    RefineGAN generator for audio synthesis.
-
-    This generator uses a combination of downsampling, residual blocks, and parallel residual blocks
-    to refine an input mel-spectrogram and fundamental frequency (F0) into an audio waveform.
-    It can also incorporate global conditioning.
-
-    Args:
-        sample_rate (int, optional): Sampling rate of the audio. Defaults to 44100.
-        downsample_rates (tuple[int], optional): Downsampling rates for the downsampling blocks. Defaults to (2, 2, 8, 8).
-        upsample_rates (tuple[int], optional): Upsampling rates for the upsampling blocks. Defaults to (8, 8, 2, 2).
-        leaky_relu_slope (float, optional): Slope for the Leaky ReLU activation. Defaults to 0.2.
-        num_mels (int, optional): Number of mel-frequency bins in the input mel-spectrogram. Defaults to 128.
-        start_channels (int, optional): Number of channels in the initial convolutional layer. Defaults to 16.
-        gin_channels (int, optional): Number of channels for the global conditioning input. Defaults to 256.
-        checkpointing (bool, optional): Whether to use checkpointing for memory efficiency. Defaults to False.
-    """
-
     def __init__(
         self,
         *,
         sample_rate: int = 44100,
-        downsample_rates: tuple[int] = (2, 2, 8, 8),  # unused
+        downsample_rates: tuple[int] = (2, 2, 8, 8),
         upsample_rates: tuple[int] = (8, 8, 2, 2),
         leaky_relu_slope: float = 0.2,
         num_mels: int = 128,
-        start_channels: int = 16,  # unused
+        start_channels: int = 16,
         gin_channels: int = 256,
         checkpointing: bool = False,
         upsample_initial_channel=512,
@@ -305,8 +233,6 @@ class RefineGANGenerator(nn.Module):
         self.upp = np.prod(upsample_rates)
         self.m_source = SineGenerator(sample_rate)
 
-        # expanded f0 sinegen -> match mel_conv
-        # (8, 1, 17280) -> (8, 16, 17280)
         self.pre_conv = weight_norm(
             nn.Conv1d(
                 1,
@@ -317,13 +243,6 @@ class RefineGANGenerator(nn.Module):
             )
         )
 
-        # (8,  16, 17280) = 4th upscale
-        # (8,  32, 8640)  = 3rd upscale
-        # (8,  64, 4320)  = 2nd upscale
-        # (8, 128, 432)   = 1st upscale
-        # (8, 256, 36) merged to mel
-
-        # f0 downsampling and upchanneling
         channels = start_channels
         size = self.upp
         self.downsample_blocks = nn.ModuleList([])
@@ -331,7 +250,6 @@ class RefineGANGenerator(nn.Module):
         for i, u in enumerate(upsample_rates):
 
             new_size = int(size / upsample_rates[-i - 1])
-            # T dimension factors for torchaudio.functional.resample
             self.df0.append([size, new_size])
             size = new_size
 
@@ -341,7 +259,6 @@ class RefineGANGenerator(nn.Module):
             )
             channels = new_channels
 
-        # mel handling
         channels = upsample_initial_channel
 
         self.mel_conv = weight_norm(
@@ -386,18 +303,13 @@ class RefineGANGenerator(nn.Module):
 
     def forward(self, mel: torch.Tensor, f0: torch.Tensor, g: torch.Tensor = None):
         f0_size = mel.shape[-1]
-        # change f0 helper to full size
         f0 = F.interpolate(f0.unsqueeze(1), size=f0_size * self.upp, mode="linear")
-        # get f0 turned into sines harmonics
         har_source = self.m_source(f0.transpose(1, 2)).transpose(1, 2)
-        # prepare for fusion to mel
         x = self.pre_conv(har_source)
-        # downsampled/upchanneled versions for each upscale
         downs = []
         for block, (old_size, new_size) in zip(self.downsample_blocks, self.df0):
             x = F.leaky_relu(x, self.leaky_relu_slope)
             downs.append(x)
-            # attempt to cancel spectral aliasing
             x = torchaudio.functional.resample(
                 x.contiguous(),
                 orig_freq=int(f0_size * old_size),
@@ -409,10 +321,8 @@ class RefineGANGenerator(nn.Module):
             )
             x = block(x)
 
-        # expanding spectrogram from 192 to 256 channels
         mel = self.mel_conv(mel)
         if g is not None:
-            # adding expanded speaker embedding
             mel = mel + self.cond(g)
 
         x = torch.cat([mel, x], dim=1)

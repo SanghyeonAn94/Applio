@@ -1,3 +1,12 @@
+"""Voice conversion inference pipeline.
+
+Provides AudioProcessor for RMS-based volume-envelope matching, Autotune for
+snapping an F0 contour to reference note frequencies, and Pipeline which runs
+preprocessing, F0 estimation, model inference, and post-processing for RVC
+voice conversion. For proposed pitch adjustment the target frequency threshold
+is 155.0 for male and 255.0 for female voices.
+"""
+
 import os
 import gc
 import sys
@@ -20,17 +29,14 @@ import logging
 logging.getLogger("faiss").setLevel(logging.WARNING)
 
 FILTER_ORDER = 5
-CUTOFF_FREQUENCY = 48  # Hz
-SAMPLE_RATE = 16000  # Hz
+CUTOFF_FREQUENCY = 48
+SAMPLE_RATE = 16000
 bh, ah = signal.butter(
     N=FILTER_ORDER, Wn=CUTOFF_FREQUENCY, btype="high", fs=SAMPLE_RATE
 )
 
 
 class AudioProcessor:
-    """
-    A class for processing audio signals, specifically for adjusting RMS levels.
-    """
 
     def change_rms(
         source_audio: np.ndarray,
@@ -39,17 +45,6 @@ class AudioProcessor:
         target_rate: int,
         rate: float,
     ):
-        """
-        Adjust the RMS level of target_audio to match the RMS of source_audio, with a given blending rate.
-
-        Args:
-            source_audio: The source audio signal as a NumPy array.
-            source_rate: The sampling rate of the source audio.
-            target_audio: The target audio signal to adjust.
-            target_rate: The sampling rate of the target audio.
-            rate: The blending rate between the source and target RMS levels.
-        """
-        # Calculate RMS of both audio data
         rms1 = librosa.feature.rms(
             y=source_audio,
             frame_length=source_rate // 2 * 2,
@@ -61,7 +56,6 @@ class AudioProcessor:
             hop_length=target_rate // 2,
         )
 
-        # Interpolate RMS to match target audio length
         rms1 = F.interpolate(
             torch.from_numpy(rms1).float().unsqueeze(0),
             size=target_audio.shape[0],
@@ -74,7 +68,6 @@ class AudioProcessor:
         ).squeeze()
         rms2 = torch.maximum(rms2, torch.zeros_like(rms2) + 1e-6)
 
-        # Adjust target audio RMS based on the source audio RMS
         adjusted_audio = (
             target_audio
             * (torch.pow(rms1, 1 - rate) * torch.pow(rms2, rate - 1)).numpy()
@@ -83,78 +76,66 @@ class AudioProcessor:
 
 
 class Autotune:
-    """
-    A class for applying autotune to a given fundamental frequency (F0) contour.
-    """
 
     def __init__(self):
-        """
-        Initializes the Autotune class with a set of reference frequencies.
-        """
         self.note_dict = [
-            49.00,  # G1
-            51.91,  # G#1 / Ab1
-            55.00,  # A1
-            58.27,  # A#1 / Bb1
-            61.74,  # B1
-            65.41,  # C2
-            69.30,  # C#2 / Db2
-            73.42,  # D2
-            77.78,  # D#2 / Eb2
-            82.41,  # E2
-            87.31,  # F2
-            92.50,  # F#2 / Gb2
-            98.00,  # G2
-            103.83,  # G#2 / Ab2
-            110.00,  # A2
-            116.54,  # A#2 / Bb2
-            123.47,  # B2
-            130.81,  # C3
-            138.59,  # C#3 / Db3
-            146.83,  # D3
-            155.56,  # D#3 / Eb3
-            164.81,  # E3
-            174.61,  # F3
-            185.00,  # F#3 / Gb3
-            196.00,  # G3
-            207.65,  # G#3 / Ab3
-            220.00,  # A3
-            233.08,  # A#3 / Bb3
-            246.94,  # B3
-            261.63,  # C4
-            277.18,  # C#4 / Db4
-            293.66,  # D4
-            311.13,  # D#4 / Eb4
-            329.63,  # E4
-            349.23,  # F4
-            369.99,  # F#4 / Gb4
-            392.00,  # G4
-            415.30,  # G#4 / Ab4
-            440.00,  # A4
-            466.16,  # A#4 / Bb4
-            493.88,  # B4
-            523.25,  # C5
-            554.37,  # C#5 / Db5
-            587.33,  # D5
-            622.25,  # D#5 / Eb5
-            659.25,  # E5
-            698.46,  # F5
-            739.99,  # F#5 / Gb5
-            783.99,  # G5
-            830.61,  # G#5 / Ab5
-            880.00,  # A5
-            932.33,  # A#5 / Bb5
-            987.77,  # B5
-            1046.50,  # C6
+            49.00,
+            51.91,
+            55.00,
+            58.27,
+            61.74,
+            65.41,
+            69.30,
+            73.42,
+            77.78,
+            82.41,
+            87.31,
+            92.50,
+            98.00,
+            103.83,
+            110.00,
+            116.54,
+            123.47,
+            130.81,
+            138.59,
+            146.83,
+            155.56,
+            164.81,
+            174.61,
+            185.00,
+            196.00,
+            207.65,
+            220.00,
+            233.08,
+            246.94,
+            261.63,
+            277.18,
+            293.66,
+            311.13,
+            329.63,
+            349.23,
+            369.99,
+            392.00,
+            415.30,
+            440.00,
+            466.16,
+            493.88,
+            523.25,
+            554.37,
+            587.33,
+            622.25,
+            659.25,
+            698.46,
+            739.99,
+            783.99,
+            830.61,
+            880.00,
+            932.33,
+            987.77,
+            1046.50,
         ]
 
     def autotune_f0(self, f0, f0_autotune_strength):
-        """
-        Autotunes a given F0 contour by snapping each frequency to the closest reference frequency.
-
-        Args:
-            f0: The input F0 contour as a NumPy array.
-        """
         autotuned_f0 = np.zeros_like(f0)
         for i, freq in enumerate(f0):
             closest_note = min(self.note_dict, key=lambda x: abs(x - freq))
@@ -163,19 +144,8 @@ class Autotune:
 
 
 class Pipeline:
-    """
-    The main pipeline class for performing voice conversion, including preprocessing, F0 estimation,
-    voice conversion using a model, and post-processing.
-    """
 
     def __init__(self, tgt_sr, config):
-        """
-        Initializes the Pipeline class with target sampling rate and configuration parameters.
-
-        Args:
-            tgt_sr: The target sampling rate for the output audio.
-            config: A configuration object containing various parameters for the pipeline.
-        """
         self.x_pad = config.x_pad
         self.x_query = config.x_query
         self.x_center = config.x_center
@@ -208,18 +178,6 @@ class Pipeline:
         proposed_pitch: bool = False,
         proposed_pitch_threshold: float = 155.0,
     ):
-        """
-        Estimates the fundamental frequency (F0) of a given audio signal using various methods.
-
-        Args:
-            x: The input audio signal as a NumPy array.
-            p_len: Desired length of the F0 output.
-            pitch: Key to adjust the pitch of the F0 contour.
-            f0_method: Method to use for F0 estimation (e.g., "crepe").
-            f0_autotune: Whether to apply autotune to the F0 contour.
-            proposed_pitch: whether to apply proposed pitch adjustment
-            proposed_pitch_threshold: target frequency, 155.0 for male, 255.0 for female
-        """
         if f0_method == "crepe":
             model = CREPE(
                 device=self.device, sample_rate=self.sample_rate, hop_size=self.window
@@ -245,15 +203,12 @@ class Pipeline:
             f0 = model.get_f0(x, p_len, filter_radius=0.006)
             del model
 
-        # f0 adjustments
         if f0_autotune is True:
             f0 = self.autotune.autotune_f0(f0, f0_autotune_strength)
         elif proposed_pitch is True:
             limit = 12
-            # calculate median f0 of the audio
             valid_f0 = np.where(f0 > 0)[0]
             if len(valid_f0) < 2:
-                # no valid f0 detected
                 up_key = 0
             else:
                 median_f0 = float(
@@ -262,7 +217,6 @@ class Pipeline:
                 if median_f0 <= 0 or np.isnan(median_f0):
                     up_key = 0
                 else:
-                    # calculate proposed shift
                     up_key = max(
                         -limit,
                         min(
@@ -278,7 +232,6 @@ class Pipeline:
             f0 *= pow(2, (pitch + up_key) / 12)
         else:
             f0 *= pow(2, pitch / 12)
-        # quantizing f0 to 255 buckets to make coarse f0
         f0bak = f0.copy()
         f0_mel = 1127 * np.log(1 + f0 / 700)
         f0_mel[f0_mel > 0] = (f0_mel[f0_mel > 0] - self.f0_mel_min) * 254 / (
@@ -304,54 +257,32 @@ class Pipeline:
         version,
         protect,
     ):
-        """
-        Performs voice conversion on a given audio segment.
-
-        Args:
-            model: The feature extractor model.
-            net_g: The generative model for synthesizing speech.
-            sid: Speaker ID for the target voice.
-            audio0: The input audio segment.
-            pitch: Quantized F0 contour for pitch guidance.
-            pitchf: Original F0 contour for pitch guidance.
-            index: FAISS index for speaker embedding retrieval.
-            big_npy: Speaker embeddings stored in a NumPy array.
-            index_rate: Blending rate for speaker embedding retrieval.
-            version: Model version (Keep to support old models).
-            protect: Protection level for preserving the original pitch.
-        """
         with torch.no_grad():
             pitch_guidance = pitch != None and pitchf != None
-            # prepare source audio
             feats = torch.from_numpy(audio0).float()
             feats = feats.mean(-1) if feats.dim() == 2 else feats
             assert feats.dim() == 1, feats.dim()
             feats = feats.view(1, -1).to(self.device)
-            # extract features
             feats = model(feats)["last_hidden_state"]
             feats = (
                 model.final_proj(feats[0]).unsqueeze(0) if version == "v1" else feats
             )
-            # make a copy for pitch guidance and protection
             feats0 = feats.clone() if pitch_guidance else None
             if (
                 index
-            ):  # set by parent function, only true if index is available, loaded, and index rate > 0
+            ):
                 feats = self._retrieve_speaker_embeddings(
                     feats, index, big_npy, index_rate
                 )
-            # feature upsampling
             feats = F.interpolate(feats.permute(0, 2, 1), scale_factor=2).permute(
                 0, 2, 1
             )
-            # adjust the length if the audio is short
             p_len = min(audio0.shape[0] // self.window, feats.shape[1])
             if pitch_guidance:
                 feats0 = F.interpolate(feats0.permute(0, 2, 1), scale_factor=2).permute(
                     0, 2, 1
                 )
                 pitch, pitchf = pitch[:, :p_len], pitchf[:, :p_len].float()
-                # Pitch protection blending
                 if protect < 0.5:
                     pitchff = pitchf.clone()
                     pitchff[pitchf > 0] = 1
@@ -369,7 +300,6 @@ class Pipeline:
                 .float()
                 .numpy()
             )
-            # clean up
             del feats, feats0, p_len
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -406,27 +336,6 @@ class Pipeline:
         proposed_pitch,
         proposed_pitch_threshold,
     ):
-        """
-        The main pipeline function for performing voice conversion.
-
-        Args:
-            model: The feature extractor model.
-            net_g: The generative model for synthesizing speech.
-            sid: Speaker ID for the target voice.
-            audio: The input audio signal.
-            input_audio_path: Path to the input audio file.
-            pitch: Key to adjust the pitch of the F0 contour.
-            f0_method: Method to use for F0 estimation.
-            file_index: Path to the FAISS index file for speaker embedding retrieval.
-            index_rate: Blending rate for speaker embedding retrieval.
-            pitch_guidance: Whether to use pitch guidance during voice conversion.
-            tgt_sr: Target sampling rate for the output audio.
-            resample_sr: Resampling rate for the output audio.
-            version: Model version.
-            protect: Protection level for preserving the original pitch.
-            hop_length: Hop length for F0 estimation methods.
-            f0_autotune: Whether to apply autotune to the F0 contour.
-        """
         if file_index != "" and os.path.exists(file_index) and index_rate > 0:
             try:
                 index = faiss.read_index(file_index)

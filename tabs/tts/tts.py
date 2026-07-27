@@ -46,7 +46,6 @@ def process_input(file_path):
         return None, None
 
 
-# TTS tab
 def tts_tab():
     trigger = get_filter_trigger()
     with gr.Column():

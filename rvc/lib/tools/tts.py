@@ -5,7 +5,6 @@ import os
 
 
 async def main():
-    # Parse command line arguments
     tts_file = str(sys.argv[1])
     text = str(sys.argv[2])
     voice = str(sys.argv[3])
@@ -22,7 +21,6 @@ async def main():
             with open(tts_file, "r") as file:
                 text = file.read()
     await edge_tts.Communicate(text, voice, rate=rates).save(output_file)
-    # print(f"TTS with {voice} completed. Output TTS file: '{output_file}'")
 
 
 if __name__ == "__main__":

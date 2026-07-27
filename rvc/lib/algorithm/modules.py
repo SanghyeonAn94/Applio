@@ -1,20 +1,10 @@
+"""WaveNet residual blocks as used in WaveGlow, with optional global conditioning."""
+
 import torch
 from rvc.lib.algorithm.commons import fused_add_tanh_sigmoid_multiply
 
 
 class WaveNet(torch.nn.Module):
-    """
-    WaveNet residual blocks as used in WaveGlow.
-
-    Args:
-        hidden_channels (int): Number of hidden channels.
-        kernel_size (int): Size of the convolutional kernel.
-        dilation_rate (int): Dilation rate of the convolution.
-        n_layers (int): Number of convolutional layers.
-        gin_channels (int, optional): Number of conditioning channels. Defaults to 0.
-        p_dropout (float, optional): Dropout probability. Defaults to 0.
-    """
-
     def __init__(
         self,
         hidden_channels: int,
@@ -33,24 +23,21 @@ class WaveNet(torch.nn.Module):
         self.n_layers = n_layers
         self.gin_channels = gin_channels
         self.p_dropout = p_dropout
-        self.n_channels_tensor = torch.IntTensor([hidden_channels])  # Static tensor
+        self.n_channels_tensor = torch.IntTensor([hidden_channels])
 
         self.in_layers = torch.nn.ModuleList()
         self.res_skip_layers = torch.nn.ModuleList()
         self.drop = torch.nn.Dropout(p_dropout)
 
-        # Conditional layer for global conditioning
         if gin_channels:
             self.cond_layer = torch.nn.utils.parametrizations.weight_norm(
                 torch.nn.Conv1d(gin_channels, 2 * hidden_channels * n_layers, 1),
                 name="weight",
             )
 
-        # Precompute dilations and paddings
         dilations = [dilation_rate**i for i in range(n_layers)]
         paddings = [(kernel_size * d - d) // 2 for d in dilations]
 
-        # Initialize layers
         for i in range(n_layers):
             self.in_layers.append(
                 torch.nn.utils.parametrizations.weight_norm(
@@ -78,7 +65,6 @@ class WaveNet(torch.nn.Module):
     def forward(self, x, x_mask, g=None):
         output = x.clone().zero_()
 
-        # Apply conditional layer if global conditioning is provided
         g = self.cond_layer(g) if g is not None else None
 
         for i in range(self.n_layers):
@@ -93,11 +79,9 @@ class WaveNet(torch.nn.Module):
                 else 0
             )
 
-            # Activation with fused Tanh-Sigmoid
             acts = fused_add_tanh_sigmoid_multiply(x_in, g_l, self.n_channels_tensor)
             acts = self.drop(acts)
 
-            # Residual and skip connections
             res_skip_acts = self.res_skip_layers[i](acts)
             if i < self.n_layers - 1:
                 res_acts = res_skip_acts[:, : self.hidden_channels, :]

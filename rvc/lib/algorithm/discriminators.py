@@ -1,3 +1,10 @@
+"""Discriminators for RVC.
+
+Provides a multi-period discriminator composed of a short-term discriminator,
+per-period discriminators, and (for v3) resolution-based discriminators, used
+to distinguish real from generated audio signals.
+"""
+
 import torch
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
@@ -8,19 +15,6 @@ from rvc.lib.algorithm.residuals import LRELU_SLOPE
 
 
 class MultiPeriodDiscriminator(torch.nn.Module):
-    """
-    Multi-period discriminator.
-
-    This class implements a multi-period discriminator, which is used to
-    discriminate between real and fake audio signals. The discriminator
-    is composed of a series of convolutional layers that are applied to
-    the input signal at different periods.
-
-    Args:
-        use_spectral_norm (bool): Whether to use spectral normalization.
-            Defaults to False.
-    """
-
     def __init__(
         self,
         use_spectral_norm: bool = False,
@@ -67,14 +61,6 @@ class MultiPeriodDiscriminator(torch.nn.Module):
 
 
 class DiscriminatorS(torch.nn.Module):
-    """
-    Discriminator for the short-term component.
-
-    This class implements a discriminator for the short-term component
-    of the audio signal. The discriminator is composed of a series of
-    convolutional layers that are applied to the input signal.
-    """
-
     def __init__(self, use_spectral_norm: bool = False):
         super().__init__()
 
@@ -104,21 +90,6 @@ class DiscriminatorS(torch.nn.Module):
 
 
 class DiscriminatorP(torch.nn.Module):
-    """
-    Discriminator for the long-term component.
-
-    This class implements a discriminator for the long-term component
-    of the audio signal. The discriminator is composed of a series of
-    convolutional layers that are applied to the input signal at a given
-    period.
-
-    Args:
-        period (int): Period of the discriminator.
-        kernel_size (int): Kernel size of the convolutional layers. Defaults to 5.
-        stride (int): Stride of the convolutional layers. Defaults to 3.
-        use_spectral_norm (bool): Whether to use spectral normalization. Defaults to False.
-    """
-
     def __init__(
         self,
         period: int,
@@ -257,6 +228,6 @@ class DiscriminatorR(torch.nn.Module):
             return_complex=True,
         )
 
-        mag = torch.norm(torch.view_as_real(x), p=2, dim=-1)  # [B, F, TT]
+        mag = torch.norm(torch.view_as_real(x), p=2, dim=-1)
 
         return mag

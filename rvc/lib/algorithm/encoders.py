@@ -1,3 +1,8 @@
+"""
+Encoder modules: Transformer Encoder, TextEncoder (with optional F0 embedding),
+and PosteriorEncoder for inferring latent representations.
+"""
+
 import math
 import torch
 from typing import Optional
@@ -9,19 +14,6 @@ from rvc.lib.algorithm.attentions import FFN, MultiHeadAttention
 
 
 class Encoder(torch.nn.Module):
-    """
-    Encoder module for the Transformer model.
-
-    Args:
-        hidden_channels (int): Number of hidden channels in the encoder.
-        filter_channels (int): Number of filter channels in the feed-forward network.
-        n_heads (int): Number of attention heads.
-        n_layers (int): Number of encoder layers.
-        kernel_size (int, optional): Kernel size of the convolution layers in the feed-forward network. Defaults to 1.
-        p_dropout (float, optional): Dropout probability. Defaults to 0.0.
-        window_size (int, optional): Window size for relative positional encoding. Defaults to 10.
-    """
-
     def __init__(
         self,
         hidden_channels: int,
@@ -86,21 +78,6 @@ class Encoder(torch.nn.Module):
 
 
 class TextEncoder(torch.nn.Module):
-    """
-    Text Encoder with configurable embedding dimension.
-
-    Args:
-        out_channels (int): Output channels of the encoder.
-        hidden_channels (int): Hidden channels of the encoder.
-        filter_channels (int): Filter channels of the encoder.
-        n_heads (int): Number of attention heads.
-        n_layers (int): Number of encoder layers.
-        kernel_size (int): Kernel size of the convolutional layers.
-        p_dropout (float): Dropout probability.
-        embedding_dim (int): Embedding dimension for phone embeddings (v1 = 256, v2 = 768).
-        f0 (bool, optional): Whether to use F0 embedding. Defaults to True.
-    """
-
     def __init__(
         self,
         out_channels: int,
@@ -134,7 +111,7 @@ class TextEncoder(torch.nn.Module):
 
         x *= math.sqrt(self.hidden_channels)
         x = self.lrelu(x)
-        x = x.transpose(1, -1)  # [B, H, T]
+        x = x.transpose(1, -1)
 
         x_mask = sequence_mask(lengths, x.size(2)).unsqueeze(1).to(x.dtype)
         x = self.encoder(x, x_mask)
@@ -145,19 +122,6 @@ class TextEncoder(torch.nn.Module):
 
 
 class PosteriorEncoder(torch.nn.Module):
-    """
-    Posterior Encoder for inferring latent representation.
-
-    Args:
-        in_channels (int): Number of channels in the input.
-        out_channels (int): Number of channels in the output.
-        hidden_channels (int): Number of hidden channels in the encoder.
-        kernel_size (int): Kernel size of the convolutional layers.
-        dilation_rate (int): Dilation rate of the convolutional layers.
-        n_layers (int): Number of layers in the encoder.
-        gin_channels (int, optional): Number of channels for the global conditioning input. Defaults to 0.
-    """
-
     def __init__(
         self,
         in_channels: int,

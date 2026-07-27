@@ -48,10 +48,8 @@ class Config:
         else:
             self.device = "cpu"
 
-        # Configuration for 6GB GPU memory
         x_pad, x_query, x_center, x_max = (1, 6, 38, 41)
         if self.gpu_mem is not None and self.gpu_mem <= 4:
-            # Configuration for 5GB GPU memory
             x_pad, x_query, x_center, x_max = (1, 5, 30, 32)
 
         return x_pad, x_query, x_center, x_max

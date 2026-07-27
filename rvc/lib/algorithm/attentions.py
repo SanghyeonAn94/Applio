@@ -1,24 +1,16 @@
+"""Attention building blocks.
+
+MultiHeadAttention provides multi-head attention with optional relative
+positional encoding and proximal bias. FFN is a feed-forward network with
+optional causal padding and gelu/relu activation.
+"""
+
 import math
 import torch
 from rvc.lib.algorithm.commons import convert_pad_shape
 
 
 class MultiHeadAttention(torch.nn.Module):
-    """
-    Multi-head attention module with optional relative positional encoding and proximal bias.
-
-    Args:
-        channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        n_heads (int): Number of attention heads.
-        p_dropout (float, optional): Dropout probability. Defaults to 0.0.
-        window_size (int, optional): Window size for relative positional encoding. Defaults to None.
-        heads_share (bool, optional): Whether to share relative positional embeddings across heads. Defaults to True.
-        block_length (int, optional): Block length for local attention. Defaults to None.
-        proximal_bias (bool, optional): Whether to use proximal bias in self-attention. Defaults to False.
-        proximal_init (bool, optional): Whether to initialize the key projection weights the same as query projection weights. Defaults to False.
-    """
-
     def __init__(
         self,
         channels: int,
@@ -44,7 +36,6 @@ class MultiHeadAttention(torch.nn.Module):
         self.block_length = block_length
         self.proximal_bias = proximal_bias
 
-        # Define projections
         self.conv_q = torch.nn.Conv1d(channels, channels, 1)
         self.conv_k = torch.nn.Conv1d(channels, channels, 1)
         self.conv_v = torch.nn.Conv1d(channels, channels, 1)
@@ -52,7 +43,6 @@ class MultiHeadAttention(torch.nn.Module):
 
         self.drop = torch.nn.Dropout(p_dropout)
 
-        # Relative positional encodings
         if window_size:
             n_heads_rel = 1 if heads_share else n_heads
             rel_stddev = self.k_channels**-0.5
@@ -65,7 +55,6 @@ class MultiHeadAttention(torch.nn.Module):
                 * rel_stddev
             )
 
-        # Initialize weights
         torch.nn.init.xavier_uniform_(self.conv_q.weight)
         torch.nn.init.xavier_uniform_(self.conv_k.weight)
         torch.nn.init.xavier_uniform_(self.conv_v.weight)
@@ -77,17 +66,13 @@ class MultiHeadAttention(torch.nn.Module):
                 self.conv_k.bias.copy_(self.conv_q.bias)
 
     def forward(self, x, c, attn_mask=None):
-        # Compute query, key, value projections
         q, k, v = self.conv_q(x), self.conv_k(c), self.conv_v(c)
 
-        # Compute attention
         x, self.attn = self.attention(q, k, v, mask=attn_mask)
 
-        # Final output projection
         return self.conv_o(x)
 
     def attention(self, query, key, value, mask=None):
-        # Reshape and compute scaled dot-product attention
         b, d, t_s, t_t = (*key.size(), query.size(2))
         query = query.view(b, self.n_heads, self.k_channels, t_t).transpose(2, 3)
         key = key.view(b, self.n_heads, self.k_channels, t_s).transpose(2, 3)
@@ -113,10 +98,8 @@ class MultiHeadAttention(torch.nn.Module):
                 )
                 scores = scores.masked_fill(block_mask == 0, -1e4)
 
-        # Apply softmax and dropout
         p_attn = self.drop(torch.nn.functional.softmax(scores, dim=-1))
 
-        # Compute attention output
         output = torch.matmul(p_attn, value)
 
         if self.window_size:
@@ -136,7 +119,6 @@ class MultiHeadAttention(torch.nn.Module):
         rel_emb = self._get_relative_embeddings(self.emb_rel_v, length)
         return self._matmul_with_relative_values(rel_weights, rel_emb)
 
-    # Helper methods
     def _matmul_with_relative_values(self, x, y):
         return torch.matmul(x, y.unsqueeze(0))
 
@@ -186,19 +168,6 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 class FFN(torch.nn.Module):
-    """
-    Feed-forward network module.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        filter_channels (int): Number of filter channels in the convolution layers.
-        kernel_size (int): Kernel size of the convolution layers.
-        p_dropout (float, optional): Dropout probability. Defaults to 0.0.
-        activation (str, optional): Activation function to use. Defaults to None.
-        causal (bool, optional): Whether to use causal padding in the convolution layers. Defaults to False.
-    """
-
     def __init__(
         self,
         in_channels: int,

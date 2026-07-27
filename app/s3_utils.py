@@ -17,7 +17,6 @@ _client = None
 
 
 def _s3():
-    """Return a module-level boto3 S3 client (created on first call)."""
     global _client
     if _client is None:
         _client = boto3.client(
@@ -28,7 +27,6 @@ def _s3():
 
 
 def parse_uri(uri: str) -> Tuple[str, str]:
-    """Split an ``s3://bucket/key`` URI into ``(bucket, key)``."""
     if not uri.startswith("s3://"):
         raise ValueError(f"Not an s3:// URI: {uri}")
     rest = uri[5:]
@@ -39,7 +37,6 @@ def parse_uri(uri: str) -> Tuple[str, str]:
 
 
 def download_file(uri: str, local_path: str) -> str:
-    """Download a single object to ``local_path``."""
     bucket, key = parse_uri(uri)
     parent = os.path.dirname(local_path)
     if parent:
@@ -49,7 +46,6 @@ def download_file(uri: str, local_path: str) -> str:
 
 
 def download_to_temp(uri: str, suffix: Optional[str] = None) -> str:
-    """Download an object to a named tempfile and return its local path."""
     bucket, key = parse_uri(uri)
     if suffix is None:
         name = key.rsplit("/", 1)[-1]
@@ -61,10 +57,6 @@ def download_to_temp(uri: str, suffix: Optional[str] = None) -> str:
 
 
 def download_prefix(prefix_uri: str, local_dir: str) -> int:
-    """Mirror every object under ``prefix_uri`` into ``local_dir``.
-
-    Returns the number of files downloaded.
-    """
     bucket, prefix = parse_uri(prefix_uri)
     if prefix and not prefix.endswith("/"):
         prefix += "/"
@@ -89,7 +81,6 @@ def download_prefix(prefix_uri: str, local_dir: str) -> int:
 
 
 def ensure_local(local_dir: str, s3_fallback_uri: str, marker: str = ".s3_synced") -> str:
-    """Ensure ``local_dir`` exists and has content; download from S3 if empty."""
     marker_path = os.path.join(local_dir, marker)
     if os.path.isdir(local_dir) and os.path.exists(marker_path):
         return local_dir
@@ -105,7 +96,6 @@ def ensure_local(local_dir: str, s3_fallback_uri: str, marker: str = ".s3_synced
 
 
 def upload_file(local_path: str, uri: str, content_type: Optional[str] = None) -> str:
-    """Upload a single file. Returns the same ``uri`` on success."""
     bucket, key = parse_uri(uri)
     extra = {"ContentType": content_type} if content_type else None
     _s3().upload_file(local_path, bucket, key, ExtraArgs=extra)
@@ -113,7 +103,6 @@ def upload_file(local_path: str, uri: str, content_type: Optional[str] = None) -
 
 
 def upload_dir(local_dir: str, prefix_uri: str) -> int:
-    """Recursively upload every file in ``local_dir`` under ``prefix_uri``."""
     bucket, prefix = parse_uri(prefix_uri)
     prefix = prefix.rstrip("/")
     count = 0

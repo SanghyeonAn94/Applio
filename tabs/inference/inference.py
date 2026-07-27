@@ -1,3 +1,14 @@
+"""
+Inference tab UI and helpers.
+
+Index files are paired to models by folder: two paths are considered the same
+folder if identical, or if one lives under a MODEL_FOLDER alias and the other
+under an INDEX_FOLDER alias at the same relative subpath (e.g. logs/models/miku
+and logs/index/miku). match_index resolves the best index by priority: exact,
+substring, then prefix match, within paired folders first and external dirs
+after, with a single-index-in-folder fallback.
+"""
+
 import datetime
 import json
 import os
@@ -55,7 +66,6 @@ def normalize_path(p):
     return os.path.normpath(p).replace("\\", "/").lower()
 
 
-# BASE model/index folder names for many latin languages (legacy: zips = models)
 MODEL_FOLDER = re.compile(r"^(?:model.{0,4}|mdl(?:s)?|weight.{0,4}|zip(?:s)?)$")
 INDEX_FOLDER = re.compile(r"^(?:ind.{0,4}|idx(?:s)?)$")
 
@@ -110,7 +120,7 @@ def get_files(type="model"):
             prev = best.get(real)
             if (
                 prev is None
-            ):  # Prefer higher score; if equal score, use first encountered
+            ):
                 best[real] = (score, order, full)
             else:
                 prev_score, prev_order, _ = prev
@@ -306,14 +316,7 @@ def delete_outputs():
 
 def folders_same(
     a: str, b: str
-) -> bool:  # Used to "pair" index and model folders based on path names
-    """
-    True if:
-      1) The two normalized paths are totally identical..OR
-      2) One lives under a MODEL_FOLDER and the other lives
-         under an INDEX_FOLDER, at the same relative subpath
-         i.e.  logs/models/miku  and  logs/index/miku  =  "SAME FOLDER"
-    """
+) -> bool:
     a = normalize_path(a)
     b = normalize_path(b)
     if a == b:
@@ -346,7 +349,6 @@ def match_index(model_file_value):
     if not model_file_value:
         return ""
 
-    # Derive the information about the model's name and path for index matching
     model_folder = normalize_path(os.path.dirname(model_file_value))
     model_name = os.path.basename(model_file_value)
     base_name = os.path.splitext(model_name)[0]
@@ -373,38 +375,28 @@ def match_index(model_file_value):
             same_count += 1
             last_same = idx
 
-            # 1) EXACT match to loaded model name and folders_same = True
             if idx_base == base_name:
                 return idx
 
-            # 2) Substring match to model name and folders_same
             if common in idx_base and same_substr is None:
                 same_substr = idx
 
-            # 3) Prefix match to model name and folders_same
             if prefix and idx_base.startswith(prefix) and same_prefixed is None:
                 same_prefixed = idx
 
-        # If it's NOT in a paired folder (folders_same = False) we look elseware:
         else:
-            # 4) EXACT match to model name in external directory
             if idx_base == base_name and external_exact is None:
                 external_exact = idx
 
-            # 5) Substring match to model name in ED
             if common in idx_base and external_substr is None:
                 external_substr = idx
 
-            # 6) Prefix match to model name in ED
             if prefix and idx_base.startswith(prefix) and external_pref is None:
                 external_pref = idx
 
-    # Fallback: If there is exactly one index file in the same (or paired) folder,
-    # we should assume that's the intended index file even if the name doesnt match
     if same_count == 1:
         return last_same
 
-    # Then by remaining priority queue:
     if same_substr:
         return same_substr
     if same_prefixed:
@@ -495,7 +487,6 @@ def update_filter_visibility(_):
     return gr.update(visible=True), gr.skip(), gr.skip()
 
 
-# Inference tab
 def inference_tab():
     trigger = get_filter_trigger()
     with gr.Column():
@@ -553,7 +544,6 @@ def inference_tab():
                 outputs=[index_file],
             )
 
-    # Single inference tab
     with gr.Tab(i18n("Single")):
         with gr.Column():
             upload_audio = gr.Audio(
@@ -1194,7 +1184,6 @@ def inference_tab():
             )
             vc_output2 = gr.Audio(label=i18n("Export Audio"))
 
-    # Batch inference tab
     with gr.Tab(i18n("Batch")):
         with gr.Row():
             with gr.Column():

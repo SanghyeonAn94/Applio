@@ -8,7 +8,6 @@ import torchcrepe
 import torchfcpe
 import os
 
-# from tools.anyf0.rmvpe import RMVPE
 from rvc.lib.predictors.RMVPE import RMVPE0Predictor
 from rvc.configs.config import Config
 
@@ -79,7 +78,6 @@ class F0Extractor:
             model_rmvpe = RMVPE0Predictor(
                 os.path.join("rvc", "models", "predictors", "rmvpe.pt"),
                 device=config.device,
-                # hop_length=80
             )
             f0 = model_rmvpe.infer_from_audio(self.wav16k, thred=0.03)
 

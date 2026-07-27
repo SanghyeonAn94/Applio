@@ -13,7 +13,6 @@ import json
 now_dir = os.getcwd()
 sys.path.append(os.path.join(now_dir))
 
-# Zluda hijack
 import rvc.lib.zluda
 
 from rvc.lib.utils import load_audio_16k, load_embedding
@@ -21,15 +20,14 @@ from rvc.train.extract.preparing_files import generate_config, generate_filelist
 from rvc.lib.predictors.f0 import CREPE, FCPE, RMVPE
 from rvc.configs.config import Config
 
-# Load config
 config = Config()
 mp.set_start_method("spawn", force=True)
 
 
 class FeatureInput:
     def __init__(self, f0_method="rmvpe", device="cpu"):
-        self.hop_size = 160  # default
-        self.sample_rate = 16000  # default
+        self.hop_size = 160
+        self.sample_rate = 16000
         self.f0_bin = 256
         self.f0_max = 1100.0
         self.f0_min = 50.0

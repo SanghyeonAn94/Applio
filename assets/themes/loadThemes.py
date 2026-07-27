@@ -1,3 +1,4 @@
+"""Theme discovery, selection, and loading backed by assets/config.json."""
 import json
 import os
 import importlib
@@ -16,13 +17,11 @@ sys.path.append(folder)
 
 
 def read_json_file(filename):
-    """Helper function to read a JSON file and return its contents."""
     with open(filename, "r", encoding="utf8") as json_file:
         return json.load(json_file)
 
 
 def get_class(filename):
-    """Retrieve the name of the first class found in the specified Python file."""
     with open(filename, "r", encoding="utf8") as file:
         for line in file:
             if "class " in line:
@@ -32,7 +31,6 @@ def get_class(filename):
 
 
 def get_theme_list():
-    """Compile a list of available themes from Python files and a JSON file."""
     themes_from_files = [
         os.path.splitext(name)[0]
         for root, _, files in os.walk(folder)
@@ -52,7 +50,6 @@ def get_theme_list():
 
 
 def select_theme(name):
-    """Select a theme by its name, updating the configuration file accordingly."""
     selected_file = f"{name}.py"
     full_path = os.path.join(folder, selected_file)
 
@@ -79,7 +76,6 @@ def select_theme(name):
 
 
 def load_theme():
-    """Load the selected theme based on the configuration file."""
     try:
         config_data = read_json_file(config_file)
         selected_file = config_data["theme"]["file"]
@@ -102,7 +98,6 @@ def load_theme():
 
 
 def read_current_theme():
-    """Read the current theme class from the configuration file."""
     try:
         config_data = read_json_file(config_file)
         selected_file = config_data["theme"]["file"]

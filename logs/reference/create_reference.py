@@ -1,3 +1,5 @@
+"""Extract F0 (fine and coarse) and embedder features from a reference wav."""
+
 import numpy as np
 import torch
 import librosa
@@ -12,7 +14,6 @@ def cf0(f0):
     f0_min = 50.0
     f0_mel_min = 1127 * np.log(1 + f0_min / 700)
     f0_mel_max = 1127 * np.log(1 + f0_max / 700)
-    """Convert F0 to coarse F0."""
     f0_mel = 1127 * np.log(1 + f0 / 700)
     f0_mel = np.clip(
         (f0_mel - f0_mel_min) * (f0_bin - 2) / (f0_mel_max - f0_mel_min) + 1,
@@ -25,7 +26,6 @@ def cf0(f0):
 ref = r"reference.wav"
 audio, sr = librosa.load(ref, sr=16000)
 trimmed_len = (len(audio) // 320) * 320
-# to prevent feature and pitch offset mismatch
 audio = audio[:trimmed_len]
 
 print("audio", audio.shape)

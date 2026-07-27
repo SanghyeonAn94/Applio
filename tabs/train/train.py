@@ -38,7 +38,6 @@ sup_audioext = {
     "ac3",
 }
 
-# Custom Pretraineds
 pretraineds_custom_path = os.path.join(
     now_dir, "rvc", "models", "pretraineds", "custom"
 )
@@ -74,7 +73,6 @@ def refresh_custom_pretraineds():
     )
 
 
-# Dataset Creator
 datasets_path = os.path.join(now_dir, "assets", "datasets")
 
 if not os.path.exists(datasets_path):
@@ -95,7 +93,6 @@ def refresh_datasets():
     return {"choices": sorted(get_datasets_list()), "__type__": "update"}
 
 
-# Model Names
 models_path = os.path.join(now_dir, "logs")
 
 
@@ -112,7 +109,6 @@ def refresh_models():
     return {"choices": sorted(get_models_list()), "__type__": "update"}
 
 
-# Refresh Models and Datasets
 def refresh_models_and_datasets():
     return (
         {"choices": sorted(get_models_list()), "__type__": "update"},
@@ -120,7 +116,6 @@ def refresh_models_and_datasets():
     )
 
 
-# Refresh Custom Embedders
 def get_embedder_custom_list():
     return [
         os.path.join(dirpath, dirname)
@@ -133,7 +128,6 @@ def refresh_custom_embedder_list():
     return {"choices": sorted(get_embedder_custom_list()), "__type__": "update"}
 
 
-# Drop Model
 def save_drop_model(dropbox):
     if ".pth" not in dropbox:
         gr.Info(
@@ -155,7 +149,6 @@ def save_drop_model(dropbox):
     return None
 
 
-# Drop Dataset
 def save_drop_dataset_audio(dropbox, dataset_name):
     if not dataset_name:
         gr.Info("Please enter a valid dataset name. Please try again.")
@@ -185,7 +178,6 @@ def save_drop_dataset_audio(dropbox, dataset_name):
             return None, relative_dataset_path
 
 
-# Drop Custom Embedder
 def create_folder_and_move_files(folder_name, bin_file, config_file):
     if not folder_name:
         return "Folder name must not be empty."
@@ -220,7 +212,6 @@ def refresh_embedders_folders():
     return custom_embedders
 
 
-# Export
 def get_pth_list():
     return [
         os.path.relpath(os.path.join(dirpath, filename), now_dir)
@@ -246,7 +237,6 @@ def refresh_pth_and_index_list():
     )
 
 
-# Export Pth and Index Files
 def export_pth(pth_path):
     allowed_paths = get_pth_list()
     normalized_allowed_paths = [
@@ -275,7 +265,6 @@ def export_index(index_path):
         return None
 
 
-# Upload to Google Drive
 def upload_to_google_drive(pth_path, index_path):
     def upload_file(file_path):
         if file_path:
@@ -306,9 +295,7 @@ def auto_enable_checkpointing():
         return False
 
 
-# Train Tab
 def train_tab():
-    # Model settings section
     with gr.Accordion(i18n("Model Settings")):
         with gr.Row():
             with gr.Column():
@@ -343,7 +330,7 @@ def train_tab():
                     info=i18n(
                         "Choose the vocoder for audio synthesis:\n- **HiFi-GAN**: Default option, compatible with all clients.\n- **MRF HiFi-GAN**: Higher fidelity, Applio-only.\n- **RefineGAN**: Superior audio quality, Applio-only."
                     ),
-                    choices=["HiFi-GAN", "RefineGAN"],  # "MRF HiFi-GAN", ],
+                    choices=["HiFi-GAN", "RefineGAN"],
                     value="HiFi-GAN",
                     interactive=True,
                     visible=True,
@@ -356,7 +343,7 @@ def train_tab():
                 with gr.Column():
                     cpu_cores = gr.Slider(
                         1,
-                        min(cpu_count(), 32),  # max 32 parallel processes
+                        min(cpu_count(), 32),
                         min(cpu_count(), 32),
                         step=1,
                         label=i18n("CPU Cores"),
@@ -382,12 +369,10 @@ def train_tab():
                         value=get_gpu_info(),
                         interactive=False,
                     )
-    # Preprocess section
     with gr.Accordion(i18n("Preprocess")):
         dataset_path = gr.Dropdown(
             label=i18n("Dataset Path"),
             info=i18n("Path to the dataset folder."),
-            # placeholder=i18n("Enter dataset path"),
             choices=get_datasets_list(),
             allow_custom_value=True,
             interactive=True,
@@ -515,7 +500,6 @@ def train_tab():
                 outputs=[preprocess_output_info],
             )
 
-    # Extract section
     with gr.Accordion(i18n("Extract")):
         with gr.Row():
             f0_method = gr.Radio(
@@ -527,7 +511,6 @@ def train_tab():
                     "crepe",
                     "crepe-tiny",
                     "rmvpe",
-                    # "fcpe"
                 ],
                 value="rmvpe",
                 interactive=True,
@@ -538,11 +521,7 @@ def train_tab():
                 info=i18n("Model used for learning speaker embedding."),
                 choices=[
                     "contentvec",
-                    # "spin",
                     "spin-v2",
-                    # "chinese-hubert-base",
-                    # "japanese-hubert-base",
-                    # "korean-hubert-base",
                     "custom",
                 ],
                 value="contentvec",
@@ -607,7 +586,6 @@ def train_tab():
             outputs=[extract_output_info],
         )
 
-    # Training section
     with gr.Accordion(i18n("Training")):
         with gr.Row():
             batch_size = gr.Slider(
@@ -829,7 +807,6 @@ def train_tab():
                 outputs=[train_output_info],
             )
 
-    # Export Model section
     with gr.Accordion(i18n("Export Model"), open=False):
         if not os.name == "nt":
             gr.Markdown(

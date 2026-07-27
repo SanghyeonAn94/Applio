@@ -1,3 +1,5 @@
+"""Realtime voice conversion pipeline using the Retrieval-Based Voice Conversion (RVC) method."""
+
 import os
 import sys
 import faiss
@@ -20,33 +22,18 @@ from rvc.lib.utils import load_embedding, HubertModelWithFinalProj
 
 
 class RealtimeVoiceConverter:
-    """
-    A class for performing realtime voice conversion using the Retrieval-Based Voice Conversion (RVC) method.
-    """
-
     def __init__(self, weight_root):
-        """
-        Initializes the RealtimeVoiceConverter with default configuration, and sets up models and parameters.
-        """
-        self.config = Config()  # Load configuration
-        self.tgt_sr = None  # Target sampling rate for the output audio
-        self.net_g = None  # Generator network for voice conversion
-        self.cpt = None  # Checkpoint for loading model weights
-        self.version = None  # Model version
-        self.use_f0 = None  # Whether the model uses F0
-        # Change this when you need to test FP16, and it may not be faster.
-        self.dtype = torch.float32  # torch.float16 if config.is_half else torch.float32
-        # load weights and setup model network.
+        self.config = Config()
+        self.tgt_sr = None
+        self.net_g = None
+        self.cpt = None
+        self.version = None
+        self.use_f0 = None
+        self.dtype = torch.float32
         self.load_model(weight_root)
         self.setup_network()
 
     def load_model(self, weight_root):
-        """
-        Loads the model weights from the specified path.
-
-        Args:
-            weight_root (str): Path to the model weights.
-        """
         self.cpt = (
             torch.load(weight_root, map_location="cpu", weights_only=True)
             if os.path.isfile(weight_root)
@@ -54,9 +41,6 @@ class RealtimeVoiceConverter:
         )
 
     def setup_network(self):
-        """
-        Sets up the network configuration based on the loaded checkpoint.
-        """
         if self.cpt is not None:
             self.tgt_sr = self.cpt["config"][-1]
             self.cpt["config"][-3] = self.cpt["weight"]["emb_g.weight"].shape[0]
@@ -76,7 +60,6 @@ class RealtimeVoiceConverter:
             strip_parametrizations(self.net_g)
             self.net_g = self.net_g.to(self.config.device).to(self.dtype)
             self.net_g.eval()
-            # self.net_g.remove_weight_norm()
 
     def inference(
         self,
@@ -148,27 +131,19 @@ class Realtime_Pipeline:
         proposed_pitch: bool = False,
         proposed_pitch_threshold: float = 155.0,
     ):
-        """
-        Estimates the fundamental frequency (F0) of a given audio signal using various methods.
-        """
-
         if torch.is_tensor(x):
-            # If the input is a tensor, it will need to be converted to numpy array to calculate with RMVPE and FCPE.
             x = x.cpu().numpy()
 
         if self.f0_method == "rmvpe":
             f0 = self.f0_model.get_f0(x, filter_radius=0.03)
         elif self.f0_method == "fcpe":
             f0 = self.f0_model.get_f0(x, x.shape[0] // self.window, filter_radius=0.006)
-        # f0 adjustments
         if f0_autotune is True:
             f0 = self.autotune.autotune_f0(f0, f0_autotune_strength)
         elif proposed_pitch is True:
             limit = 12
-            # calculate median f0 of the audio
             valid_f0 = np.where(f0 > 0)[0]
             if len(valid_f0) < 2:
-                # no valid f0 detected
                 up_key = 0
             else:
                 median_f0 = float(
@@ -177,7 +152,6 @@ class Realtime_Pipeline:
                 if median_f0 <= 0 or np.isnan(median_f0):
                     up_key = 0
                 else:
-                    # calculate proposed shift
                     up_key = max(
                         -limit,
                         min(
@@ -189,17 +163,13 @@ class Realtime_Pipeline:
                             ),
                         ),
                     )
-            print(
-                "calculated pitch offset:", up_key
-            )  # Might need to hide so terminal output doesn't become a mess
+            print("calculated pitch offset:", up_key)
             f0 *= pow(2, (f0_up_key + up_key) / 12)
         else:
             f0 *= pow(2, f0_up_key / 12)
 
-        # Convert to Tensor for computational use
         f0 = torch.from_numpy(f0).to(self.device).float()
 
-        # quantizing f0 to 255 buckets to make coarse f0
         f0_mel = 1127.0 * torch.log(1.0 + f0 / 700.0)
         f0_mel = torch.clip(
             (f0_mel - self.f0_min) * 254 / (self.f0_max - self.f0_min) + 1,
@@ -238,9 +208,6 @@ class Realtime_Pipeline:
         reduced_noise=None,
         board=None,
     ):
-        """
-        Performs realtime voice conversion on a given audio segment.
-        """
         with torch.no_grad():
             assert audio.dim() == 1, audio.dim()
             feats = audio.view(1, -1).to(self.device)
@@ -262,7 +229,6 @@ class Realtime_Pipeline:
                 else (None, None)
             )
 
-            # extract features
             feats = self.hubert_model(feats)["last_hidden_state"]
             feats = (
                 self.hubert_model.final_proj(feats[0]).unsqueeze(0)
@@ -271,13 +237,10 @@ class Realtime_Pipeline:
             )
 
             feats = torch.cat((feats, feats[:, -1:, :]), 1)
-            # make a copy for pitch guidance and protection
             feats0 = feats.detach().clone() if self.use_f0 else None
 
             try:
-                if (
-                    self.index and index_rate > 0
-                ):  # set by parent function, only true if index is available, loaded, and index rate > 0
+                if self.index and index_rate > 0:
                     feats = self._retrieve_speaker_embeddings(
                         skip_head, feats, self.index, self.big_npy, index_rate
                     )
@@ -285,7 +248,6 @@ class Realtime_Pipeline:
                 print("The index file structure is incompatible with the model.")
                 self.index = self.big_npy = None
 
-            # feature upsampling
             feats = F.interpolate(feats.permute(0, 2, 1), scale_factor=2).permute(
                 0, 2, 1
             )[:, :p_len, :]
@@ -298,7 +260,6 @@ class Realtime_Pipeline:
                     formant_length / return_length
                 )
 
-                # Pitch protection blending
                 if protect < 0.5:
                     pitchff = pitchf.detach().clone()
                     pitchff[pitchf > 0] = 1
@@ -388,13 +349,8 @@ def create_pipeline(
     f0_method: str = "rmvpe",
     embedder_model: str = None,
     embedder_model_custom: str = None,
-    # device: str = "cuda",
     sid: int = 0,
 ):
-    """
-    Initialize real-time voice conversion pipeline.
-    """
-
     vc = RealtimeVoiceConverter(model_path)
     index, big_npy = load_faiss_index(
         index_path.strip()
@@ -422,13 +378,9 @@ def create_pipeline(
 
 
 def strip_parametrizations(module: torch.nn.Module):
-    """
-    Remove all parametrizations (e.g., weight norm) from a module and log each removal.
-    """
     for name, submodule in module.named_modules():
         if hasattr(submodule, "parametrizations"):
             for pname, plist in list(submodule.parametrizations.items()):
-                # print(f"Removing parametrizations from {name}.{pname}: {[p.__class__.__name__ for p in plist]}")
                 torch.nn.utils.parametrize.remove_parametrizations(
                     submodule, pname, leave_parametrized=True
                 )

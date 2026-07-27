@@ -48,7 +48,6 @@ class Realtime:
         clean_strength: float = 0.5,
         post_process: bool = False,
         **kwargs,
-        # device: str = "cuda",
     ):
         self.sample_rate = SAMPLE_RATE
         self.convert_buffer = None
@@ -57,7 +56,6 @@ class Realtime:
         self.return_length = 0
         self.skip_head = 0
         self.silence_front = 0
-        # Convert dB to RMS
         self.input_sensitivity = 10 ** (silent_threshold / 20)
         self.window_size = self.sample_rate // 100
         self.kwargs = None
@@ -76,19 +74,16 @@ class Realtime:
             else None
         )
         self.board = self.setup_pedalboard(**kwargs) if post_process else None
-        # Create conversion pipelines
         self.pipeline = create_pipeline(
             model_path,
             index_path,
             f0_method,
             embedder_model,
             embedder_model_custom,
-            # device,
             sid,
         )
         self.device = self.pipeline.device
         self.dtype = self.pipeline.dtype
-        # noise reduce
         self.reduced_noise = (
             TorchGate(
                 self.pipeline.tgt_sr,
@@ -97,7 +92,6 @@ class Realtime:
             if clean_audio
             else None
         )
-        # Resampling of inputs and outputs.
         self.resample_in = tat.Resample(
             orig_freq=AUDIO_SAMPLE_RATE, new_freq=self.sample_rate, dtype=torch.float32
         ).to(self.device)
@@ -174,7 +168,6 @@ class Realtime:
         crossfade_frame: int,
         sola_search_frame: int,
     ):
-        # Calculate frame sizes based on DEVICE sample rate (f.e., 48000Hz) and convert to 16000Hz
         block_frame_16k = int(block_frame / AUDIO_SAMPLE_RATE * self.sample_rate)
         crossfade_frame_16k = int(
             crossfade_frame / AUDIO_SAMPLE_RATE * self.sample_rate
@@ -190,9 +183,7 @@ class Realtime:
             + extra_frame_16k
             + crossfade_frame_16k
         )
-        if (
-            modulo := convert_size_16k % self.window_size
-        ) != 0:  # Compensate for truncation due to hop size in model output.
+        if (modulo := convert_size_16k % self.window_size) != 0:
             convert_size_16k = convert_size_16k + (self.window_size - modulo)
         self.convert_feature_size_16k = convert_size_16k // self.window_size
 
@@ -201,17 +192,13 @@ class Realtime:
         self.silence_front = (
             extra_frame_16k - (self.window_size * 5) if self.silence_front else 0
         )
-        # Audio buffer to measure volume between chunks
         audio_buffer_size = block_frame_16k + crossfade_frame_16k
         self.audio_buffer = torch.zeros(
             audio_buffer_size, dtype=self.dtype, device=self.device
         )
-        # Audio buffer for conversion without silence
         self.convert_buffer = torch.zeros(
             convert_size_16k, dtype=self.dtype, device=self.device
         )
-        # Additional +1 is to compensate for pitch extraction algorithm
-        # that can output additional feature.
         self.pitch_buffer = torch.zeros(
             self.convert_feature_size_16k + 1, dtype=torch.int64, device=self.device
         )
@@ -234,7 +221,6 @@ class Realtime:
         if self.pipeline is None:
             raise RuntimeError("Pipeline is not initialized.")
 
-        # Input audio is always float32
         audio_input_16k = self.resample_in(
             torch.as_tensor(audio_input, dtype=torch.float32, device=self.device)
         ).to(self.dtype)
@@ -249,9 +235,6 @@ class Realtime:
         if self.vad is not None:
             is_speech = self.vad.is_speech(audio_input_16k.cpu().numpy().copy())
             if not is_speech:
-                # Busy wait to keep power manager happy and clocks stable. Running pipeline on-demand seems to lag when the delay between
-                # voice changer activation is too high.
-                # https://forums.developer.nvidia.com/t/why-kernel-calculate-speed-got-slower-after-waiting-for-a-while/221059/9
                 audio_model = self.pipeline.voice_conversion(
                     self.convert_buffer,
                     self.pitch_buffer,
@@ -357,7 +340,6 @@ class VoiceChanger:
         record_audio_path: str = None,
         export_format: str = "WAV",
         **kwargs,
-        # device: str = "cuda",
     ):
         self.soundfile = None
         self.record_audio = record_audio
@@ -383,7 +365,6 @@ class VoiceChanger:
             clean_strength,
             post_process,
             **kwargs,
-            # device
         )
         self.device = self.vc_model.device
         self.vc_model.realloc(
@@ -412,7 +393,6 @@ class VoiceChanger:
         )
 
         self.fade_out_window: torch.Tensor = 1 - self.fade_in_window
-        # The size will change from the previous result, so the record will be deleted.
         self.sola_buffer = torch.zeros(
             self.crossfade_frame, device=self.device, dtype=torch.float32
         )
@@ -458,10 +438,6 @@ class VoiceChanger:
             proposed_pitch_threshold,
         )
 
-        # if audio is None:
-        # In case there's an actual silence - send full block with zeros
-        # return np.zeros(block_size, dtype=np.float32), vol
-
         conv_input = audio[
             None, None, : self.crossfade_frame + self.sola_search_frame
         ].float()
@@ -503,9 +479,7 @@ class VoiceChanger:
         if self.vc_model is None:
             raise RuntimeError("Voice Changer is not selected.")
 
-        start = (
-            time.perf_counter()
-        )  # Using perf_counter to measure real-time voice conversion latency.
+        start = time.perf_counter()
         result, vol = self.process_audio(
             audio_input,
             f0_up_key,

@@ -13,7 +13,6 @@ import logging
 from transformers import HubertModel
 import warnings
 
-# Remove this to see warnings about transformers models
 warnings.filterwarnings("ignore")
 
 logging.getLogger("fairseq").setLevel(logging.ERROR)
@@ -35,7 +34,6 @@ class HubertModelWithFinalProj(HubertModel):
 
 
 def load_audio_16k(file):
-    # this is used by f0 and feature extractions that load preprocessed 16k files, so there's no need to resample
     try:
         audio, sr = librosa.load(file, sr=16000)
     except Exception as error:

@@ -1,3 +1,5 @@
+"""Dataset, collate, and distributed bucket sampler utilities for loading text and audio training pairs."""
+
 import os
 import numpy as np
 import torch
@@ -8,13 +10,6 @@ from utils import load_filepaths_and_text, load_wav_to_torch
 
 
 class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
-    """
-    Dataset that loads text and audio pairs.
-
-    Args:
-        hparams: Hyperparameters.
-    """
-
     def __init__(self, hparams):
         self.audiopaths_and_text = load_filepaths_and_text(hparams.training_files)
         self.max_wav_value = hparams.max_wav_value
@@ -28,9 +23,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         self._filter()
 
     def _filter(self):
-        """
-        Filters audio paths and text pairs based on text length.
-        """
         audiopaths_and_text_new = []
         lengths = []
         for audiopath, text, pitch, pitchf, dv in self.audiopaths_and_text:
@@ -41,12 +33,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         self.lengths = lengths
 
     def get_sid(self, sid):
-        """
-        Converts speaker ID to a LongTensor.
-
-        Args:
-            sid (str): Speaker ID.
-        """
         try:
             sid = torch.LongTensor([int(sid)])
         except ValueError as error:
@@ -55,12 +41,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         return sid
 
     def get_audio_text_pair(self, audiopath_and_text):
-        """
-        Loads and processes audio and text data for a single pair.
-
-        Args:
-            audiopath_and_text (list): List containing audio path, text, pitch, pitchf, and speaker ID.
-        """
         file = audiopath_and_text[0]
         phone = audiopath_and_text[1]
         pitch = audiopath_and_text[2]
@@ -87,14 +67,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         return (spec, wav, phone, pitch, pitchf, dv)
 
     def get_labels(self, phone, pitch, pitchf):
-        """
-        Loads and processes phoneme, pitch, and pitchf labels.
-
-        Args:
-            phone (str): Path to phoneme label file.
-            pitch (str): Path to pitch label file.
-            pitchf (str): Path to pitchf label file.
-        """
         phone = np.load(phone)
         phone = np.repeat(phone, 2, axis=0)
         pitch = np.load(pitch)
@@ -109,12 +81,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         return phone, pitch, pitchf
 
     def get_audio(self, filename):
-        """
-        Loads and processes audio data.
-
-        Args:
-            filename (str): Path to audio file.
-        """
         audio, sample_rate = load_wav_to_torch(filename)
         if sample_rate != self.sample_rate:
             raise ValueError(
@@ -150,39 +116,17 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
         return spec, audio_norm
 
     def __getitem__(self, index):
-        """
-        Returns a single audio-text pair.
-
-        Args:
-            index (int): Index of the data sample.
-        """
         return self.get_audio_text_pair(self.audiopaths_and_text[index])
 
     def __len__(self):
-        """
-        Returns the length of the dataset.
-        """
         return len(self.audiopaths_and_text)
 
 
 class TextAudioCollateMultiNSFsid:
-    """
-    Collates text and audio data for training.
-
-    Args:
-        return_ids (bool, optional): Whether to return sample IDs. Defaults to False.
-    """
-
     def __init__(self, return_ids=False):
         self.return_ids = return_ids
 
     def __call__(self, batch):
-        """
-        Collates a batch of data samples.
-
-        Args:
-            batch (list): List of data samples.
-        """
         _, ids_sorted_decreasing = torch.sort(
             torch.LongTensor([x[0].size(1) for x in batch]), dim=0, descending=True
         )
@@ -244,18 +188,6 @@ class TextAudioCollateMultiNSFsid:
 
 
 class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
-    """
-    Distributed sampler that groups data into buckets based on length.
-
-    Args:
-        dataset (torch.utils.data.Dataset): Dataset to sample from.
-        batch_size (int): Batch size.
-        boundaries (list): List of length boundaries for buckets.
-        num_replicas (int, optional): Number of processes participating in distributed training. Defaults to None.
-        rank (int, optional): Rank of the current process. Defaults to None.
-        shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
-    """
-
     def __init__(
         self,
         dataset,
@@ -275,9 +207,6 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
         self.num_samples = self.total_size // self.num_replicas
 
     def _create_buckets(self):
-        """
-        Creates buckets of data samples based on length.
-        """
         buckets = [[] for _ in range(len(self.boundaries) - 1)]
         for i in range(len(self.lengths)):
             length = self.lengths[i]
@@ -285,7 +214,7 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
             if idx_bucket != -1:
                 buckets[idx_bucket].append(i)
 
-        for i in range(len(buckets) - 1, -1, -1):  #
+        for i in range(len(buckets) - 1, -1, -1):
             if len(buckets[i]) == 0:
                 buckets.pop(i)
                 self.boundaries.pop(i + 1)
@@ -301,9 +230,6 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
         return buckets, num_samples_per_bucket
 
     def __iter__(self):
-        """
-        Iterates over batches of data samples.
-        """
         g = torch.Generator()
         g.manual_seed(self.epoch)
 
@@ -331,7 +257,6 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
 
             ids_bucket = ids_bucket[self.rank :: self.num_replicas]
 
-            # batching
             for j in range(len(ids_bucket) // self.batch_size):
                 batch = [
                     bucket[idx]
@@ -350,14 +275,6 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
         return iter(self.batches)
 
     def _bisect(self, x, lo=0, hi=None):
-        """
-        Performs binary search to find the bucket index for a given length.
-
-        Args:
-            x (int): Length to find the bucket for.
-            lo (int, optional): Lower bound of the search range. Defaults to 0.
-            hi (int, optional): Upper bound of the search range. Defaults to None.
-        """
         if hi is None:
             hi = len(self.boundaries) - 1
 
@@ -373,7 +290,4 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
             return -1
 
     def __len__(self):
-        """
-        Returns the length of the sampler.
-        """
         return self.num_samples // self.batch_size

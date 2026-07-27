@@ -1,17 +1,15 @@
 #!/bin/bash
-set -e  # Exit immediately if a command exits with a non-zero status
+set -e
 
 printf "\033]0;Installer\007"
 clear
 rm -f *.bat
 
-# Function to log messages with timestamps
 log_message() {
     local msg="$1"
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $msg"
 }
 
-# Function to find a suitable Python version
 find_python() {
     for py in python3.12 python3 python; do
         if command -v "$py" > /dev/null 2>&1; then
@@ -23,7 +21,6 @@ find_python() {
     exit 1
 }
 
-# Function to install FFmpeg based on the distribution
 install_ffmpeg() {
     if command -v brew > /dev/null; then
         log_message "Installing FFmpeg using Homebrew on macOS..."
@@ -43,7 +40,6 @@ install_ffmpeg() {
     fi
 }
 
-# Function to install FFmpeg using Flatpak
 install_ffmpeg_flatpak() {
     if command -v flatpak > /dev/null; then
         log_message "Installing FFmpeg using Flatpak..."
@@ -71,7 +67,6 @@ install_python_ffmpeg() {
     uv pip install python-ffmpeg
 }
 
-# Function to create or activate a virtual environment
 prepare_install() {
     if [ -d ".venv" ]; then
         log_message "Virtual environment found. This implies Applio has been already installed or this is a broken install."
@@ -91,7 +86,6 @@ prepare_install() {
     fi
 }
 
-# Function to create the virtual environment and install dependencies
 create_venv() {
     log_message "Creating virtual environment..."
     py=$(find_python)
@@ -116,14 +110,12 @@ create_venv() {
     finish
 }
 
-# Function to finish installation
 finish() {
     clear
     echo "Applio has been successfully installed. Run the file run-applio.sh to start the web interface!"
     exit 0
 }
 
-# Main script execution
 if [ "$(uname)" = "Darwin" ]; then
     log_message "Detected macOS..."
     if ! command -v brew >/dev/null 2>&1; then
@@ -131,7 +123,6 @@ if [ "$(uname)" = "Darwin" ]; then
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
 
-    # Add more detailed Python version check
     log_message "Checking Python versions..."
     log_message "python3 path: $(which python3)"
     log_message "python3.12 path: $(which python3.12 2>/dev/null || echo 'not found')"
@@ -150,7 +141,6 @@ if [ "$(uname)" = "Darwin" ]; then
         log_message "Python version $python_version is not 3.12. Installing Python 3.12 using Homebrew..."
         brew install python@3.12
         export PATH="$(brew --prefix)/opt/python@3.12/bin:$PATH"
-        # Verify the installed version
         log_message "Verifying installed Python version..."
         python_version=$(python3.12 --version | awk '{print $2}' | cut -d'.' -f1,2)
         if [ "$python_version" != "3.12" ]; then

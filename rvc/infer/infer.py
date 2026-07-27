@@ -1,3 +1,5 @@
+"""Voice conversion using the Retrieval-Based Voice Conversion (RVC) method."""
+
 import os
 import sys
 import soxr
@@ -39,50 +41,28 @@ logging.getLogger("faiss.loader").setLevel(logging.WARNING)
 
 
 class VoiceConverter:
-    """
-    A class for performing voice conversion using the Retrieval-Based Voice Conversion (RVC) method.
-    """
-
     def __init__(self):
-        """
-        Initializes the VoiceConverter with default configuration, and sets up models and parameters.
-        """
-        self.config = Config()  # Load configuration
+        self.config = Config()
         self.hubert_model = (
-            None  # Initialize the Hubert model (for embedding extraction)
+            None
         )
-        self.last_embedder_model = None  # Last used embedder model
-        self.tgt_sr = None  # Target sampling rate for the output audio
-        self.net_g = None  # Generator network for voice conversion
-        self.vc = None  # Voice conversion pipeline instance
-        self.cpt = None  # Checkpoint for loading model weights
-        self.version = None  # Model version
-        self.n_spk = None  # Number of speakers in the model
-        self.use_f0 = None  # Whether the model uses F0
+        self.last_embedder_model = None
+        self.tgt_sr = None
+        self.net_g = None
+        self.vc = None
+        self.cpt = None
+        self.version = None
+        self.n_spk = None
+        self.use_f0 = None
         self.loaded_model = None
 
     def load_hubert(self, embedder_model: str, embedder_model_custom: str = None):
-        """
-        Loads the HuBERT model for speaker embedding extraction.
-
-        Args:
-            embedder_model (str): Path to the pre-trained HuBERT model.
-            embedder_model_custom (str): Path to the custom HuBERT model.
-        """
         self.hubert_model = load_embedding(embedder_model, embedder_model_custom)
         self.hubert_model = self.hubert_model.to(self.config.device).float()
         self.hubert_model.eval()
 
     @staticmethod
     def remove_audio_noise(data, sr, reduction_strength=0.7):
-        """
-        Removes noise from an audio file using the NoiseReduce library.
-
-        Args:
-            data (numpy.ndarray): The audio data as a NumPy array.
-            sr (int): The sample rate of the audio data.
-            reduction_strength (float): Strength of the noise reduction. Default is 0.7.
-        """
         try:
             reduced_noise = nr.reduce_noise(
                 y=data, sr=sr, prop_decrease=reduction_strength
@@ -94,14 +74,6 @@ class VoiceConverter:
 
     @staticmethod
     def convert_audio_format(input_path, output_path, output_format):
-        """
-        Converts an audio file to a specified output format.
-
-        Args:
-            input_path (str): Path to the input audio file.
-            output_path (str): Path to the output audio file.
-            output_format (str): Desired audio format (e.g., "WAV", "MP3").
-        """
         try:
             if output_format != "WAV":
                 print(f"Saving audio as {output_format}...")
@@ -217,32 +189,6 @@ class VoiceConverter:
         proposed_pitch_threshold: float = 155.0,
         **kwargs,
     ):
-        """
-        Performs voice conversion on the input audio.
-
-        Args:
-            pitch (int): Key for F0 up-sampling.
-            index_rate (float): Rate for index matching.
-            volume_envelope (int): RMS mix rate.
-            protect (float): Protection rate for certain audio segments.
-            hop_length (int): Hop length for audio processing.
-            f0_method (str): Method for F0 extraction.
-            audio_input_path (str): Path to the input audio file.
-            audio_output_path (str): Path to the output audio file.
-            model_path (str): Path to the voice conversion model.
-            index_path (str): Path to the index file.
-            split_audio (bool): Whether to split the audio for processing.
-            f0_autotune (bool): Whether to use F0 autotune.
-            clean_audio (bool): Whether to clean the audio.
-            clean_strength (float): Strength of the audio cleaning.
-            export_format (str): Format for exporting the audio.
-            f0_file (str): Path to the F0 file.
-            embedder_model (str): Path to the embedder model.
-            embedder_model_custom (str): Path to the custom embedder model.
-            resample_sr (int, optional): Resample sampling rate. Default is 0.
-            sid (int, optional): Speaker ID. Default is 0.
-            **kwargs: Additional keyword arguments.
-        """
         if not model_path:
             print("No model path provided. Aborting conversion.")
             return
@@ -353,16 +299,6 @@ class VoiceConverter:
         audio_output_path: str,
         **kwargs,
     ):
-        """
-        Performs voice conversion on a batch of input audio files.
-
-        Args:
-            audio_input_paths (str): List of paths to the input audio files.
-            audio_output_path (str): Path to the output audio file.
-            resample_sr (int, optional): Resample sampling rate. Default is 0.
-            sid (int, optional): Speaker ID. Default is 0.
-            **kwargs: Additional keyword arguments.
-        """
         pid = os.getpid()
         try:
             with open(
@@ -414,13 +350,6 @@ class VoiceConverter:
             os.remove(os.path.join(now_dir, "assets", "infer_pid.txt"))
 
     def get_vc(self, weight_root, sid):
-        """
-        Loads the voice conversion model and sets up the pipeline.
-
-        Args:
-            weight_root (str): Path to the model weights.
-            sid (int): Speaker ID.
-        """
         if sid == "" or sid == []:
             self.cleanup_model()
             if torch.cuda.is_available():
@@ -437,9 +366,6 @@ class VoiceConverter:
                 self.loaded_model = None
 
     def cleanup_model(self):
-        """
-        Cleans up the model and releases resources.
-        """
         if self.hubert_model is not None:
             del self.net_g, self.n_spk, self.vc, self.hubert_model, self.tgt_sr
             self.hubert_model = self.net_g = self.n_spk = self.vc = self.tgt_sr = None
@@ -452,12 +378,6 @@ class VoiceConverter:
         self.cpt = None
 
     def load_model(self, weight_root):
-        """
-        Loads the model weights from the specified path.
-
-        Args:
-            weight_root (str): Path to the model weights.
-        """
         self.cpt = (
             torch.load(weight_root, map_location="cpu", weights_only=True)
             if os.path.isfile(weight_root)
@@ -465,9 +385,6 @@ class VoiceConverter:
         )
 
     def setup_network(self):
-        """
-        Sets up the network configuration based on the loaded checkpoint.
-        """
         if self.cpt is not None:
             self.tgt_sr = self.cpt["config"][-1]
             self.cpt["config"][-3] = self.cpt["weight"]["emb_g.weight"].shape[0]
@@ -488,9 +405,6 @@ class VoiceConverter:
             self.net_g.eval()
 
     def setup_vc_instance(self):
-        """
-        Sets up the voice conversion pipeline instance based on the target sampling rate and configuration.
-        """
         if self.cpt is not None:
             self.vc = VC(self.tgt_sr, self.config)
             self.n_spk = self.cpt["config"][-3]

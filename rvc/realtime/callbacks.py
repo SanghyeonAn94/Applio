@@ -45,7 +45,6 @@ class AudioCallbacks:
         record_audio_path: str = None,
         export_format: str = "WAV",
         **kwargs,
-        # device: str = "cuda",
     ):
         self.pass_through = pass_through
         self.lock = threading.Lock()
@@ -70,7 +69,6 @@ class AudioCallbacks:
             record_audio_path,
             export_format,
             **kwargs,
-            # device,
         )
         self.audio = Audio(
             self,
@@ -100,7 +98,7 @@ class AudioCallbacks:
         proposed_pitch: bool = False,
         proposed_pitch_threshold: float = 155.0,
     ):
-        if self.pass_through:  # through
+        if self.pass_through:
             vol = float(np.sqrt(np.square(received_data).mean(dtype=np.float32)))
             return received_data, vol, [0, 0, 0], None
 

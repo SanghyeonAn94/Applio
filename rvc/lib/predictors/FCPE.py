@@ -1,3 +1,5 @@
+"""FCPE fundamental frequency (F0) predictor and supporting model components."""
+
 from typing import Union
 
 import torch.nn.functional as F
@@ -22,7 +24,6 @@ os.environ["LRU_CACHE_CAPACITY"] = "3"
 
 
 def load_wav_to_torch(full_path, target_sr=None, return_empty_on_exception=False):
-    """Loads wav file to torch tensor."""
     try:
         data, sample_rate = sf.read(full_path, always_2d=True)
     except Exception as error:
@@ -35,7 +36,6 @@ def load_wav_to_torch(full_path, target_sr=None, return_empty_on_exception=False
     data = data[:, 0] if len(data.shape) > 1 else data
     assert len(data) > 2
 
-    # Normalize data
     max_mag = (
         -np.iinfo(data.dtype).min
         if np.issubdtype(data.dtype, np.integer)
@@ -46,7 +46,6 @@ def load_wav_to_torch(full_path, target_sr=None, return_empty_on_exception=False
     )
     data = torch.FloatTensor(data.astype(np.float32)) / max_mag
 
-    # Handle exceptions and resample
     if (torch.isinf(data) | torch.isnan(data)).any() and return_empty_on_exception:
         return [], sample_rate or target_sr or 48000
     if target_sr is not None and sample_rate != target_sr:
@@ -114,7 +113,6 @@ class STFT:
         win_size_new = int(np.round(win_size * factor))
         hop_length_new = int(np.round(hop_length * speed))
 
-        # Optimize mel_basis and hann_window caching
         mel_basis = self.mel_basis if not train else {}
         hann_window = self.hann_window if not train else {}
 
@@ -129,7 +127,6 @@ class STFT:
         if keyshift_key not in hann_window:
             hann_window[keyshift_key] = torch.hann_window(win_size_new).to(y.device)
 
-        # Padding and STFT
         pad_left = (win_size_new - hop_length_new) // 2
         pad_right = max(
             (win_size_new - hop_length_new + 1) // 2,
@@ -153,7 +150,6 @@ class STFT:
         )
         spec = torch.sqrt(spec.real.pow(2) + spec.imag.pow(2) + (1e-9))
 
-        # Handle keyshift and mel conversion
         if keyshift != 0:
             size = n_fft // 2 + 1
             resize = spec.size(1)
@@ -181,22 +177,18 @@ def softmax_kernel(
 ):
     b, h, *_ = data.shape
 
-    # Normalize data
     data_normalizer = (data.shape[-1] ** -0.25) if normalize_data else 1.0
 
-    # Project data
     ratio = projection_matrix.shape[0] ** -0.5
     projection = repeat(projection_matrix, "j d -> b h j d", b=b, h=h)
     projection = projection.type_as(data)
     data_dash = torch.einsum("...id,...jd->...ij", (data_normalizer * data), projection)
 
-    # Calculate diagonal data
     diag_data = data**2
     diag_data = torch.sum(diag_data, dim=-1)
     diag_data = (diag_data / 2.0) * (data_normalizer**2)
     diag_data = diag_data.unsqueeze(dim=-1)
 
-    # Apply softmax
     if is_query:
         data_dash = ratio * (
             torch.exp(
@@ -541,7 +533,7 @@ class SelfAttention(nn.Module):
                 global_mask = context_mask[:, None, :, None]
                 v.masked_fill_(~global_mask, 0.0)
             if cross_attend:
-                pass  # TODO: Implement cross-attention
+                pass
             else:
                 out = self.fast_attention(q, k, v)
             attn_outs.append(out)
@@ -621,7 +613,6 @@ class FCPE(nn.Module):
         )
         self.register_buffer("cent_table", self.cent_table_b)
 
-        # conv in stack
         _leaky = nn.LeakyReLU()
         self.stack = nn.Sequential(
             nn.Conv1d(input_channel, n_chans, 3, 1, 1),
@@ -630,7 +621,6 @@ class FCPE(nn.Module):
             nn.Conv1d(n_chans, n_chans, 3, 1, 1),
         )
 
-        # transformer
         self.decoder = PCmer(
             num_layers=n_layers,
             num_heads=8,
@@ -642,7 +632,6 @@ class FCPE(nn.Module):
         )
         self.norm = nn.LayerNorm(n_chans)
 
-        # out
         self.n_out = out_dims
         self.dense_out = weight_norm(nn.Linear(n_chans, self.n_out))
 
@@ -802,9 +791,7 @@ class Wav2Mel:
             )
             audio_res = self.resample_kernel[key_str](audio)
 
-        mel = self.extract_nvstft(
-            audio_res, keyshift=keyshift, train=train
-        )  # B, n_frames, bins
+        mel = self.extract_nvstft(audio_res, keyshift=keyshift, train=train)
         n_frames = int(audio.shape[1] // self.hop_size) + 1
         mel = (
             torch.cat((mel, mel[:, -1:, :]), 1) if n_frames > int(mel.shape[1]) else mel

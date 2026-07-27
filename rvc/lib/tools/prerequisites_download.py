@@ -1,3 +1,5 @@
+"""Download pipeline for Applio prerequisite files (pretrained models, embedders, predictors, executables)."""
+
 import os
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
@@ -45,9 +47,6 @@ folder_mapping_list = {
 
 
 def get_file_size_if_missing(file_list):
-    """
-    Calculate the total size of files to be downloaded only if they do not exist locally.
-    """
     total_size = 0
     for remote_folder, files in file_list:
         local_folder = folder_mapping_list.get(remote_folder, "")
@@ -61,11 +60,6 @@ def get_file_size_if_missing(file_list):
 
 
 def download_file(url, destination_path, global_bar):
-    """
-    Download a file from the given URL to the specified destination path,
-    updating the global progress bar as data is downloaded.
-    """
-
     dir_name = os.path.dirname(destination_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
@@ -78,10 +72,6 @@ def download_file(url, destination_path, global_bar):
 
 
 def download_mapping_files(file_mapping_list, global_bar):
-    """
-    Download all files in the provided file mapping list using a thread pool executor,
-    and update the global progress bar as downloads progress.
-    """
     with ThreadPoolExecutor() as executor:
         futures = []
         for remote_folder, file_list in file_mapping_list:
@@ -120,9 +110,6 @@ def calculate_total_size(
     models,
     exe,
 ):
-    """
-    Calculate the total size of all files to be downloaded based on selected categories.
-    """
     total_size = 0
     if models:
         total_size += get_file_size_if_missing(models_list)
@@ -139,9 +126,6 @@ def prequisites_download_pipeline(
     models,
     exe,
 ):
-    """
-    Manage the download pipeline for different categories of files.
-    """
     total_size = calculate_total_size(
         pretraineds_hifigan_list if pretraineds_hifigan else [],
         models,

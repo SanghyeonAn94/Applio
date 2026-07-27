@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Iterable
 import gradio as gr
 
-# gr.themes.builder()
 from gradio.themes.base import Base
 from gradio.themes.utils import colors, fonts, sizes
 
@@ -53,7 +52,6 @@ class Applio(Base):
         self.secondary_950 = "#1d3660"
 
         super().set(
-            # Blaise
             background_fill_primary="#110F0F",
             background_fill_primary_dark="#110F0F",
             background_fill_secondary="#110F0F",

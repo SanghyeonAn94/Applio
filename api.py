@@ -29,7 +29,6 @@ import asyncio
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-# Add current directory to path
 now_dir = os.getcwd()
 sys.path.append(now_dir)
 
@@ -38,7 +37,6 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-# Import Applio core functions
 from core import (
     run_infer_script,
     run_preprocess_script,
@@ -47,51 +45,41 @@ from core import (
     run_index_script,
 )
 
-# Initialize FastAPI app
 app = FastAPI(
     title="Applio RVC API",
     description="RESTful API for Applio RVC voice conversion",
     version="1.0.0"
 )
 
-# Global state
 current_model_path: Optional[str] = None
 current_index_path: Optional[str] = None
 
 
-# Pydantic models for request/response
 class InferenceRequest(BaseModel):
-    """Voice conversion inference request"""
     input_path: str = Field(..., description="Path to input audio file")
     output_path: str = Field(..., description="Path to output audio file")
     pth_path: str = Field(..., description="Path to RVC model (.pth)")
     index_path: str = Field("", description="Path to index file (.index)")
 
-    # F0 (pitch) parameters
     f0_method: str = Field("rmvpe", description="F0 extraction method (rmvpe, crepe, harvest, etc.)")
     pitch: int = Field(0, description="Pitch shift in semitones")
 
-    # Conversion parameters
     index_rate: float = Field(0.75, description="Feature index influence (0.0-1.0)", ge=0.0, le=1.0)
     volume_envelope: float = Field(1.0, description="Volume envelope mix rate", ge=0.0, le=1.0)
     protect: float = Field(0.33, description="Protect voiceless consonants", ge=0.0, le=0.5)
 
-    # Audio processing
     split_audio: bool = Field(False, description="Split audio into chunks")
     f0_autotune: bool = Field(False, description="Enable auto-tune")
     f0_autotune_strength: float = Field(1.0, description="Auto-tune strength", ge=0.0, le=1.0)
 
-    # Output format
     export_format: str = Field("wav", description="Output format (wav, flac, mp3, etc.)")
 
-    # Advanced parameters
     embedder_model: str = Field("contentvec", description="Speaker embedder model")
     clean_audio: bool = Field(False, description="Clean audio artifacts")
     clean_strength: float = Field(0.7, description="Cleaning strength", ge=0.0, le=1.0)
 
 
 class InferenceResponse(BaseModel):
-    """Voice conversion inference response"""
     success: bool
     output_path: Optional[str] = None
     processing_time_ms: int
@@ -99,17 +87,14 @@ class InferenceResponse(BaseModel):
 
 
 class SetModelRequest(BaseModel):
-    """Model switching request"""
     model_path: str = Field(..., description="Path to RVC model (.pth)")
     index_path: Optional[str] = Field(None, description="Path to index file (.index)")
 
 
 class ControlRequest(BaseModel):
-    """Control command request"""
     command: str = Field(..., description="Control command (restart, exit)")
 
 class PreprocessRequest(BaseModel):
-    """Preprocess request for RVC training stage 1"""
     model_name: str = Field(..., description="Model/character name")
     dataset_path: str = Field(..., description="Path to audio files directory")
     sample_rate: int = Field(48000, description="Sample rate (32000, 40000, 48000)")
@@ -124,7 +109,6 @@ class PreprocessRequest(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    """Extract features request for RVC training stage 2"""
     model_name: str = Field(..., description="Model/character name")
     f0_method: str = Field(default="rmvpe", description="F0 extraction method")
     cpu_cores: int = Field(default=8, description="Number of CPU cores")
@@ -136,7 +120,6 @@ class ExtractRequest(BaseModel):
 
 
 class TrainRequest(BaseModel):
-    """Train RVC model request for RVC training stage 3"""
     model_name: str = Field(..., description="Model/character name")
     save_every_epoch: int = Field(default=10, description="Save checkpoint every N epochs")
     save_only_latest: bool = Field(default=False, description="Keep only latest checkpoint")
@@ -159,13 +142,11 @@ class TrainRequest(BaseModel):
 
 
 class IndexRequest(BaseModel):
-    """Generate index request for RVC training stage 4"""
     model_name: str = Field(..., description="Model/character name")
     index_algorithm: str = Field("Auto", description="Index algorithm (Auto, Faiss, KMeans)")
 
 
 class TrainingResponse(BaseModel):
-    """Training operation response"""
     success: bool
     message: str
     processing_time_ms: int
@@ -174,12 +155,6 @@ class TrainingResponse(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint
-
-    Returns:
-        200: Service is healthy
-    """
     return {
         "status": "healthy",
         "service": "applio-rvc",
@@ -191,20 +166,6 @@ async def health_check():
 
 @app.get("/set_model")
 async def set_model(model_path: str, index_path: Optional[str] = None):
-    """
-    Switch RVC model weights
-
-    GET:
-        http://127.0.0.1:6969/set_model?model_path=/path/to/model.pth&index_path=/path/to/index.index
-
-    Args:
-        model_path: Path to RVC model file (.pth)
-        index_path: Path to index file (.index) (optional)
-
-    Returns:
-        200: Model loaded successfully
-        400: Model loading failed
-    """
     global current_model_path, current_index_path
 
     try:
@@ -237,33 +198,9 @@ async def set_model(model_path: str, index_path: Optional[str] = None):
 
 @app.post("/infer", response_model=InferenceResponse)
 async def infer(request: InferenceRequest):
-    """
-    Voice conversion inference
-
-    POST:
-    ```json
-    {
-        "input_path": "/path/to/input.wav",
-        "output_path": "/path/to/output.wav",
-        "pth_path": "/path/to/model.pth",
-        "index_path": "/path/to/index.index",
-        "f0_method": "rmvpe",
-        "pitch": 0,
-        "index_rate": 0.75,
-        "volume_envelope": 1.0,
-        "protect": 0.33,
-        "export_format": "wav"
-    }
-    ```
-
-    Returns:
-        200: Inference successful with output path
-        400: Inference failed with error message
-    """
     start_time = datetime.now()
 
     try:
-        # Validate input file exists
         if not os.path.exists(request.input_path):
             return InferenceResponse(
                 success=False,
@@ -271,7 +208,6 @@ async def infer(request: InferenceRequest):
                 error_message=f"Input file not found: {request.input_path}"
             )
 
-        # Validate model file exists
         if not os.path.exists(request.pth_path):
             return InferenceResponse(
                 success=False,
@@ -345,7 +281,6 @@ async def infer(request: InferenceRequest):
             sid=0,
         )
 
-        # Wait for output file (disk I/O may lag under heavy load)
         for _retry in range(10):
             if os.path.exists(request.output_path):
                 break
@@ -379,23 +314,6 @@ async def infer(request: InferenceRequest):
 
 @app.post("/control")
 async def control(request: ControlRequest):
-    """
-    Control commands
-
-    POST:
-    ```json
-    {
-        "command": "restart"
-    }
-    ```
-
-    Commands:
-        - restart: Reload the service
-        - exit: Shutdown the service
-
-    Returns:
-        200: Command executed
-    """
     if request.command == "restart":
         return {"status": "restarting"}
 
@@ -412,32 +330,6 @@ async def control(request: ControlRequest):
 
 @app.post("/training/preprocess", response_model=TrainingResponse)
 async def preprocess_dataset(request: PreprocessRequest):
-    """
-    Preprocess audio dataset for RVC training (Stage 1)
-
-    Slices audio files, applies effects, and prepares them for feature extraction.
-
-    POST:
-    ```json
-    {
-        "model_name": "character_name",
-        "dataset_path": "/path/to/audio/files",
-        "sample_rate": 48000,
-        "cpu_cores": 8,
-        "cut_preprocess": "Automatic",
-        "process_effects": false,
-        "noise_reduction": false,
-        "clean_strength": 0.7,
-        "chunk_len": 3.0,
-        "overlap_len": 0.3,
-        "normalization_mode": "none"
-    }
-    ```
-
-    Returns:
-        200: Preprocessing successful
-        400: Preprocessing failed
-    """
     start_time = datetime.now()
 
     try:
@@ -485,29 +377,6 @@ async def preprocess_dataset(request: PreprocessRequest):
 
 @app.post("/training/extract", response_model=TrainingResponse)
 async def extract_features(request: ExtractRequest):
-    """
-    Extract features for RVC training (Stage 2)
-
-    Extracts F0 pitch features and speaker embeddings from preprocessed audio.
-
-    POST:
-    ```json
-    {
-        "model_name": "character_name",
-        "f0_method": "rmvpe",
-        "cpu_cores": 8,
-        "gpu": "0",
-        "sample_rate": 48000,
-        "embedder_model": "contentvec",
-        "embedder_model_custom": null,
-        "include_mutes": 2
-    }
-    ```
-
-    Returns:
-        200: Feature extraction successful
-        400: Feature extraction failed
-    """
     start_time = datetime.now()
 
     try:
@@ -544,38 +413,6 @@ async def extract_features(request: ExtractRequest):
 
 @app.post("/training/train", response_model=TrainingResponse)
 async def train_model(request: TrainRequest):
-    """
-    Train RVC model (Stage 3)
-
-    Trains the RVC model using extracted features. This is the longest operation.
-
-    POST:
-    ```json
-    {
-        "model_name": "character_name",
-        "save_every_epoch": 10,
-        "save_only_latest": false,
-        "save_every_weights": true,
-        "total_epoch": 1000,
-        "sample_rate": 48000,
-        "batch_size": 8,
-        "gpu": "0",
-        "pretrained": true,
-        "custom_pretrained": false,
-        "overtraining_detector": false,
-        "overtraining_threshold": 50,
-        "cleanup": false,
-        "cache_data_in_gpu": false,
-        "vocoder": "HiFi-GAN",
-        "checkpointing": false,
-        "index_algorithm": "Auto"
-    }
-    ```
-
-    Returns:
-        200: Training successful (includes index generation)
-        400: Training failed
-    """
     start_time = datetime.now()
 
     try:
@@ -624,24 +461,6 @@ async def train_model(request: TrainRequest):
 
 @app.post("/training/index", response_model=TrainingResponse)
 async def generate_index(request: IndexRequest):
-    """
-    Generate index file for RVC model (Stage 4)
-
-    Creates FAISS index for feature retrieval during inference.
-    Usually called automatically by training, but can be called separately.
-
-    POST:
-    ```json
-    {
-        "model_name": "character_name",
-        "index_algorithm": "Auto"
-    }
-    ```
-
-    Returns:
-        200: Index generation successful
-        400: Index generation failed
-    """
     start_time = datetime.now()
 
     try:
@@ -671,13 +490,11 @@ async def generate_index(request: IndexRequest):
 
 
 async def shutdown():
-    """Graceful shutdown"""
     await asyncio.sleep(1)
     os._exit(0)
 
 
 def parse_args():
-    """Parse command line arguments"""
     parser = argparse.ArgumentParser(
         description="Applio RVC API Server"
     )

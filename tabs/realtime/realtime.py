@@ -1,3 +1,14 @@
+"""
+Real-time voice conversion tab UI and helpers.
+
+Index files are paired to models by folder: two paths are the same folder if
+identical, or if one lives under a MODEL_FOLDER alias and the other under an
+INDEX_FOLDER alias at the same relative subpath (e.g. logs/models/miku and
+logs/index/miku). match_index resolves the best index by priority: exact,
+substring, then prefix match, within paired folders first and external dirs
+after, with a single-index-in-folder fallback.
+"""
+
 import gradio as gr
 import sounddevice as sd
 import os
@@ -82,7 +93,7 @@ def get_files(type="model"):
             prev = best.get(real)
             if (
                 prev is None
-            ):  # Prefer higher score; if equal score, use first encountered
+            ):
                 best[real] = (score, order, full)
             else:
                 prev_score, prev_order, _ = prev
@@ -95,14 +106,7 @@ def get_files(type="model"):
 
 def folders_same(
     a: str, b: str
-) -> bool:  # Used to "pair" index and model folders based on path names
-    """
-    True if:
-      1) The two normalized paths are totally identical..OR
-      2) One lives under a MODEL_FOLDER and the other lives
-         under an INDEX_FOLDER, at the same relative subpath
-         i.e.  logs/models/miku  and  logs/index/miku  =  "SAME FOLDER"
-    """
+) -> bool:
     a = normalize_path(a)
     b = normalize_path(b)
     if a == b:
@@ -135,7 +139,6 @@ def match_index(model_file_value):
     if not model_file_value:
         return ""
 
-    # Derive the information about the model's name and path for index matching
     model_folder = normalize_path(os.path.dirname(model_file_value))
     model_name = os.path.basename(model_file_value)
     base_name = os.path.splitext(model_name)[0]
@@ -162,38 +165,28 @@ def match_index(model_file_value):
             same_count += 1
             last_same = idx
 
-            # 1) EXACT match to loaded model name and folders_same = True
             if idx_base == base_name:
                 return idx
 
-            # 2) Substring match to model name and folders_same
             if common in idx_base and same_substr is None:
                 same_substr = idx
 
-            # 3) Prefix match to model name and folders_same
             if prefix and idx_base.startswith(prefix) and same_prefixed is None:
                 same_prefixed = idx
 
-        # If it's NOT in a paired folder (folders_same = False) we look elseware:
         else:
-            # 4) EXACT match to model name in external directory
             if idx_base == base_name and external_exact is None:
                 external_exact = idx
 
-            # 5) Substring match to model name in ED
             if common in idx_base and external_substr is None:
                 external_substr = idx
 
-            # 6) Prefix match to model name in ED
             if prefix and idx_base.startswith(prefix) and external_pref is None:
                 external_pref = idx
 
-    # Fallback: If there is exactly one index file in the same (or paired) folder,
-    # we should assume that's the intended index file even if the name doesnt match
     if same_count == 1:
         return last_same
 
-    # Then by remaining priority queue:
     if same_substr:
         return same_substr
     if same_prefixed:
@@ -297,7 +290,6 @@ def save_realtime_settings(
         if "realtime" not in config:
             config["realtime"] = {}
 
-        # Only save non-None values, preserve existing values for None inputs
         if input_device is not None:
             config["realtime"][
                 "client_input_device" if client_mode else "input_device"
@@ -372,8 +364,6 @@ def get_safe_dropdown_value(saved_value, choices, fallback_value=None):
 
 
 def get_safe_index_value(saved_value, choices, fallback_value=None):
-    """Safely get an index file value, handling file path matching"""
-    # Handle empty string, None, or whitespace-only values
     if not saved_value or (isinstance(saved_value, str) and not saved_value.strip()):
         if fallback_value and fallback_value in choices:
             return fallback_value
@@ -382,17 +372,14 @@ def get_safe_index_value(saved_value, choices, fallback_value=None):
         else:
             return None
 
-    # Check exact match first
     if saved_value in choices:
         return saved_value
 
-    # Check if saved value is a filename that matches any choice
     saved_filename = os.path.basename(saved_value)
     for choice in choices:
         if os.path.basename(choice) == saved_filename:
             return choice
 
-    # Fallback to default or first choice
     if fallback_value and fallback_value in choices:
         return fallback_value
     elif choices:
@@ -620,10 +607,6 @@ def change_callbacks_config():
     global callbacks
 
     if running and audio_manager is not None and callbacks is not None:
-        # print(callbacks_kwargs)
-
-        # It will need to create a new stream to work.
-        # callbacks.vc.block_frame = callbacks_kwargs.get("read_chunk_size", 192) * 128
         crossfade_frame = int(
             callbacks_kwargs.get("cross_fade_overlap_size", 0.1) * AUDIO_SAMPLE_RATE
         )
@@ -635,13 +618,6 @@ def change_callbacks_config():
             callbacks.vc.crossfade_frame != crossfade_frame
             or callbacks.vc.extra_frame != extra_frame
         ):
-            # Deleting these things is not a good idea; they should only be overwritten directly.
-            # del (
-            #     callbacks.vc.vc_model.audio_buffer,
-            #     callbacks.vc.vc_model.convert_buffer,
-            #     callbacks.vc.vc_model.pitch_buffer,
-            #     callbacks.vc.vc_model.pitchf_buffer,
-            # )
             del (
                 callbacks.vc.fade_in_window,
                 callbacks.vc.fade_out_window,
@@ -672,11 +648,6 @@ def change_callbacks_config():
                 frame_duration_ms=30,
             )
 
-        # The VAD parameters have been assigned by default.
-        # if callbacks.vc.vc_model.vad is not None:
-        #     callbacks.vc.vc_model.vad.vad.set_mode(vad_sensitivity)
-        #     callbacks.vc.vc_model.vad.frame_length = int(callbacks.vc.vc_model.sample_rate * (vad_frame_ms / 1000.0))
-
         clean_audio = callbacks_kwargs.get("clean_audio", False)
         clean_strength = callbacks_kwargs.get("clean_strength", 0.5)
 
@@ -700,7 +671,6 @@ def change_callbacks_config():
             callbacks.vc.vc_model.board = None
             callbacks.vc.vc_model.kwargs = None
         elif post_process and callbacks.vc.vc_model.kwargs != kwargs:
-            # Post-process requires creating a new pendalboard.
             new_board = callbacks.vc.vc_model.setup_pedalboard(**kwargs)
             callbacks.vc.vc_model.board = new_board
             callbacks.vc.vc_model.kwargs = kwargs.copy()
@@ -732,7 +702,6 @@ def change_callbacks_config():
             callbacks.vc.vc_model.model_path = model_pth
             callbacks.vc.vc_model.pipeline.vc.load_model(model_pth)
             callbacks.vc.vc_model.pipeline.vc.setup_network()
-            # Set a new version, otherwise it will crash.
             callbacks.vc.vc_model.pipeline.version = (
                 callbacks.vc.vc_model.pipeline.vc.version
             )
@@ -741,7 +710,6 @@ def change_callbacks_config():
         if callbacks.vc.vc_model.pipeline.sid != sid:
             import torch
 
-            # This is for multi-SID models.
             callbacks.vc.vc_model.pipeline.torch_sid = torch.tensor(
                 [sid], device=callbacks.vc.vc_model.pipeline.device, dtype=torch.int64
             )
@@ -965,7 +933,6 @@ def realtime_tab():
             else []
         )
 
-    # Load saved settings
 
     with gr.Blocks() as ui:
         with gr.Row():
@@ -1153,7 +1120,7 @@ def realtime_tab():
                         ),
                         value=False,
                         interactive=True,
-                        visible=client_mode,  # This is quite bad because it's prone to errors when used locally.
+                        visible=client_mode,
                     )
                     vad_enabled = gr.Checkbox(
                         label=i18n("Enable VAD"),
@@ -1584,7 +1551,7 @@ def realtime_tab():
                         info=i18n(
                             "Influence exerted by the index file; a higher value corresponds to greater influence. However, opting for lower values can help mitigate artifacts present in the audio."
                         ),
-                        value=0,  # The index is not always necessary, so disabling it can help improve latency.
+                        value=0,
                         interactive=True,
                     )
                     volume_envelope = gr.Slider(
@@ -1723,9 +1690,7 @@ def realtime_tab():
             new_index = match_index(model_path)
             new_sids = get_speakers_id(model_path)
 
-            # Get updated index choices
             new_index_choices = get_files("index")
-            # Use the matched index as fallback, but handle empty strings
             fallback_index = new_index if new_index and new_index.strip() else None
             safe_index_value = get_safe_index_value(
                 "", new_index_choices, fallback_index
@@ -2110,15 +2075,7 @@ def realtime_tab():
 
             stop_button.click(
                 fn=stop_realtime, outputs=[latency_info, start_button, stop_button]
-            )  # .then(
-            #     fn=lambda: (
-            #         yield gr.update(value="Stopped"),
-            #         interactive_true,
-            #         interactive_false,
-            #     ),
-            #     inputs=None,
-            #     outputs=[latency_info, start_button, stop_button],
-            # )
+            )
 
             record_audio.click(
                 fn=soundfile_record_audio,
@@ -2138,7 +2095,6 @@ def realtime_tab():
             fn=update_on_model_change, inputs=[model_file], outputs=[index_file, sid]
         )
 
-        # Add event handlers to save settings
         input_audio_device.change(
             fn=save_realtime_settings,
             inputs=[
@@ -2413,8 +2369,6 @@ def realtime_tab():
             inputs=[silent_threshold],
             outputs=[],
         )
-
-        # chunk_size.change(fn=lambda value: change_config(int(value * AUDIO_SAMPLE_RATE / 1000 / 128) if not client_mode else None, "read_chunk_size"), inputs=[chunk_size], outputs=[])
 
         pitch.change(
             js=(

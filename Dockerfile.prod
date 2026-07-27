@@ -1,12 +1,7 @@
-# Production Dockerfile for Applio RVC
-# Self-contained image with GPU support and all dependencies
-
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
-# Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies including Python 3.12
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     && add-apt-repository ppa:deadsnakes/ppa \
@@ -24,67 +19,51 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install AWS CLI v2
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf awscliv2.zip aws
 
-# Install pip for Python 3.12
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 
-# Set Python 3.12 as default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
-# Set working directory
 WORKDIR /workspace
 
-# Environment variables for GPU
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Copy only requirements.txt for dependency pre-installation
 COPY requirements.txt /tmp/applio-requirements.txt
 
-# Install typing-extensions first from PyPI to avoid naming conflict
 RUN pip install --no-cache-dir typing-extensions>=4.10.0
 
-# Install PyTorch with CUDA 12.8 support first
 RUN pip install --no-cache-dir \
     torch==2.7.1 \
     torchvision==0.22.1 \
     torchaudio==2.7.1 \
     --index-url https://download.pytorch.org/whl/cu128
 
-# Install python-ffmpeg
 RUN pip install --no-cache-dir python-ffmpeg
 
-# Install Applio dependencies
 RUN pip install --no-cache-dir -r /tmp/applio-requirements.txt
 
-# Create cache storage directory (shared with ML Service)
 RUN mkdir -p /app/shared/cache_storage
 
-# Copy mute directories to /tmp for later restoration
 COPY logs/mute /tmp/mute
 COPY logs/mute_spin /tmp/mute_spin
 COPY logs/mute_spin-v2 /tmp/mute_spin-v2
 
-# Expose API port
 EXPOSE 6969
 
-# Environment variables for S3 model download
 ENV API_HOST=0.0.0.0
 ENV API_PORT=6969
 ENV MODEL_DIR=/workspace/Applio
 ENV S3_MODEL_URI=s3://shiftup-enterprise-ai-service/tts/model_registry/Applio/
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:6969/health || exit 1
 
-# Create entrypoint script for S3 model download and mute directory initialization
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\

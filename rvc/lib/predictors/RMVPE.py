@@ -1,3 +1,5 @@
+"""RMVPE0 fundamental frequency (F0) predictor and its DeepUnet/E2E model components."""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,15 +13,6 @@ N_CLASS = 360
 
 
 class ConvBlockRes(nn.Module):
-    """
-    A convolutional block with residual connection.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(self, in_channels, out_channels, momentum=0.01):
         super(ConvBlockRes, self).__init__()
         self.conv = nn.Sequential(
@@ -58,17 +51,6 @@ class ConvBlockRes(nn.Module):
 
 
 class ResEncoderBlock(nn.Module):
-    """
-    A residual encoder block.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        kernel_size (tuple): Size of the average pooling kernel.
-        n_blocks (int): Number of convolutional blocks in the block.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(
         self, in_channels, out_channels, kernel_size, n_blocks=1, momentum=0.01
     ):
@@ -92,19 +74,6 @@ class ResEncoderBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    """
-    The encoder part of the DeepUnet.
-
-    Args:
-        in_channels (int): Number of input channels.
-        in_size (int): Size of the input tensor.
-        n_encoders (int): Number of encoder blocks.
-        kernel_size (tuple): Size of the average pooling kernel.
-        n_blocks (int): Number of convolutional blocks in each encoder block.
-        out_channels (int): Number of output channels for the first encoder block.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(
         self,
         in_channels,
@@ -143,17 +112,6 @@ class Encoder(nn.Module):
 
 
 class Intermediate(nn.Module):
-    """
-    The intermediate layer of the DeepUnet.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        n_inters (int): Number of convolutional blocks in the intermediate layer.
-        n_blocks (int): Number of convolutional blocks in each intermediate block.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(self, in_channels, out_channels, n_inters, n_blocks, momentum=0.01):
         super(Intermediate, self).__init__()
         self.n_inters = n_inters
@@ -173,17 +131,6 @@ class Intermediate(nn.Module):
 
 
 class ResDecoderBlock(nn.Module):
-    """
-    A residual decoder block.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        stride (tuple): Stride for transposed convolution.
-        n_blocks (int): Number of convolutional blocks in the block.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(self, in_channels, out_channels, stride, n_blocks=1, momentum=0.01):
         super(ResDecoderBlock, self).__init__()
         out_padding = (0, 1) if stride == (1, 2) else (1, 1)
@@ -215,17 +162,6 @@ class ResDecoderBlock(nn.Module):
 
 
 class Decoder(nn.Module):
-    """
-    The decoder part of the DeepUnet.
-
-    Args:
-        in_channels (int): Number of input channels.
-        n_decoders (int): Number of decoder blocks.
-        stride (tuple): Stride for transposed convolution.
-        n_blocks (int): Number of convolutional blocks in each decoder block.
-        momentum (float): Momentum for batch normalization.
-    """
-
     def __init__(self, in_channels, n_decoders, stride, n_blocks, momentum=0.01):
         super(Decoder, self).__init__()
         self.layers = nn.ModuleList()
@@ -244,18 +180,6 @@ class Decoder(nn.Module):
 
 
 class DeepUnet(nn.Module):
-    """
-    The DeepUnet architecture.
-
-    Args:
-        kernel_size (tuple): Size of the average pooling kernel.
-        n_blocks (int): Number of convolutional blocks in each encoder/decoder block.
-        en_de_layers (int): Number of encoder/decoder layers.
-        inter_layers (int): Number of convolutional blocks in the intermediate layer.
-        in_channels (int): Number of input channels.
-        en_out_channels (int): Number of output channels for the first encoder block.
-    """
-
     def __init__(
         self,
         kernel_size,
@@ -287,19 +211,6 @@ class DeepUnet(nn.Module):
 
 
 class E2E(nn.Module):
-    """
-    The end-to-end model.
-
-    Args:
-        n_blocks (int): Number of convolutional blocks in each encoder/decoder block.
-        n_gru (int): Number of GRU layers.
-        kernel_size (tuple): Size of the average pooling kernel.
-        en_de_layers (int): Number of encoder/decoder layers.
-        inter_layers (int): Number of convolutional blocks in the intermediate layer.
-        in_channels (int): Number of input channels.
-        en_out_channels (int): Number of output channels for the first encoder block.
-    """
-
     def __init__(
         self,
         n_blocks,
@@ -340,20 +251,6 @@ class E2E(nn.Module):
 
 
 class MelSpectrogram(torch.nn.Module):
-    """
-    Extracts Mel-spectrogram features from audio.
-
-    Args:
-        n_mel_channels (int): Number of Mel-frequency bands.
-        sample_rate (int): Sampling rate of the audio.
-        win_length (int): Length of the window function in samples.
-        hop_length (int): Hop size between frames in samples.
-        n_fft (int, optional): Length of the FFT window. Defaults to None, which uses win_length.
-        mel_fmin (int, optional): Minimum frequency for the Mel filter bank. Defaults to 0.
-        mel_fmax (int, optional): Maximum frequency for the Mel filter bank. Defaults to None.
-        clamp (float, optional): Minimum value for clamping the Mel-spectrogram. Defaults to 1e-5.
-    """
-
     def __init__(
         self,
         n_mel_channels,
@@ -418,14 +315,6 @@ class MelSpectrogram(torch.nn.Module):
 
 
 class RMVPE0Predictor:
-    """
-    A predictor for fundamental frequency (F0) based on the RMVPE0 model.
-
-    Args:
-        model_path (str): Path to the RMVPE0 model file.
-        device (str, optional): Device to use for computation. Defaults to None, which uses CUDA if available.
-    """
-
     def __init__(self, model_path, device=None):
         self.resample_kernel = {}
         model = E2E(4, 1, (2, 2))
@@ -443,65 +332,34 @@ class RMVPE0Predictor:
         self.cents_mapping = np.pad(cents_mapping, (4, 4))
 
     def mel2hidden(self, mel, chunk_size=32000):
-        """
-        Converts Mel-spectrogram features to hidden representation.
-
-        Args:
-            mel (torch.Tensor): Mel-spectrogram features.
-        """
         with torch.no_grad():
             n_frames = mel.shape[-1]
-            # print('n_frames', n_frames)
-            # print('mel shape before padding', mel.shape)
             mel = F.pad(
                 mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode="reflect"
             )
-            # print('mel shape after padding', mel.shape)
 
             output_chunks = []
             pad_frames = mel.shape[-1]
             for start in range(0, pad_frames, chunk_size):
-                # print('chunk @', start)
                 end = min(start + chunk_size, pad_frames)
                 mel_chunk = mel[..., start:end]
                 assert (
                     mel_chunk.shape[-1] % 32 == 0
                 ), "chunk_size must be divisible by 32"
-                # print(' before padding', mel_chunk.shape)
-                # mel_chunk = F.pad(mel_chunk, (320, 320), mode="reflect")
-                # print(' after padding', mel_chunk.shape)
 
                 out_chunk = self.model(mel_chunk)
-                # print(' result chunk', out_chunk.shape)
-                # out_chunk = out_chunk[:, 320:-320, :]
-                # print(' trimmed chunk', out_chunk.shape)
                 output_chunks.append(out_chunk)
 
             hidden = torch.cat(output_chunks, dim=1)
-        # print('output', hidden[:, :n_frames].shape)
         return hidden[:, :n_frames]
 
     def decode(self, hidden, thred=0.03):
-        """
-        Decodes hidden representation to F0.
-
-        Args:
-            hidden (np.ndarray): Hidden representation.
-            thred (float, optional): Threshold for salience. Defaults to 0.03.
-        """
         cents_pred = self.to_local_average_cents(hidden, thred=thred)
         f0 = 10 * (2 ** (cents_pred / 1200))
         f0[f0 == 10] = 0
         return f0
 
     def infer_from_audio(self, audio, thred=0.03):
-        """
-        Infers F0 from audio.
-
-        Args:
-            audio (np.ndarray): Audio signal.
-            thred (float, optional): Threshold for salience. Defaults to 0.03.
-        """
         audio = torch.from_numpy(audio).float().to(self.device).unsqueeze(0)
         mel = self.mel_extractor(audio, center=True)
         del audio
@@ -513,13 +371,6 @@ class RMVPE0Predictor:
         return f0
 
     def to_local_average_cents(self, salience, thred=0.05):
-        """
-        Converts salience to local average cents.
-
-        Args:
-            salience (np.ndarray): Salience values.
-            thred (float, optional): Threshold for salience. Defaults to 0.05.
-        """
         center = np.argmax(salience, axis=1)
         salience = np.pad(salience, ((0, 0), (4, 4)))
         center += 4
@@ -541,15 +392,6 @@ class RMVPE0Predictor:
 
 
 class BiGRU(nn.Module):
-    """
-    A bidirectional GRU layer.
-
-    Args:
-        input_features (int): Number of input features.
-        hidden_features (int): Number of hidden features.
-        num_layers (int): Number of GRU layers.
-    """
-
     def __init__(self, input_features, hidden_features, num_layers):
         super(BiGRU, self).__init__()
         self.gru = nn.GRU(

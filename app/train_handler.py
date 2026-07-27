@@ -30,9 +30,6 @@ import runpod
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Default follows the code instead of naming a fixed image path, so it stays
-# correct wherever the checkout is installed (/srv/applio, /app/Applio, a dev
-# clone). app/train_handler.py -> parents[1] is the Applio repo root.
 _REPO_ROOT = str(pathlib.Path(__file__).resolve().parents[1])
 
 APPLIO_BASE_DIR = os.environ.get("APPLIO_BASE_DIR", _REPO_ROOT)
@@ -65,7 +62,6 @@ def _snapshot_progress() -> Dict[str, Any]:
 
 
 def _find_best_checkpoint(logs_model_dir: str, model_name: str) -> Optional[str]:
-    """Return the newest ``*best_epoch.pth`` file for a trained model."""
     matches = sorted(
         glob.glob(os.path.join(logs_model_dir, f"{model_name}_*best_epoch.pth")),
         key=os.path.getmtime,
@@ -84,7 +80,6 @@ def _send_callback(url: str, payload: Dict[str, Any]) -> None:
 
 
 def _train(event: Dict[str, Any], inp: Dict[str, Any]) -> Dict[str, Any]:
-    """Run the complete Applio RVC training pipeline."""
     job_id = uuid.uuid4().hex[:8]
     character_id = inp.get("character_id") or ""
     character_name = inp.get("character_name") or ""

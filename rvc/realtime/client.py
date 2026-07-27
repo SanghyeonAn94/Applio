@@ -41,13 +41,6 @@ async def change_config(ws: WebSocket):
         vc_instance.crossfade_frame != crossfade_frame
         or vc_instance.extra_frame != extra_frame
     ):
-        # Deleting these things is not a good idea; they should only be overwritten directly.
-        # del (
-        #     vc_instance.vc_model.audio_buffer,
-        #     vc_instance.vc_model.convert_buffer,
-        #     vc_instance.vc_model.pitch_buffer,
-        #     vc_instance.vc_model.pitchf_buffer,
-        # )
         del (
             vc_instance.fade_in_window,
             vc_instance.fade_out_window,
@@ -78,11 +71,6 @@ async def change_config(ws: WebSocket):
             frame_duration_ms=30,
         )
 
-    # The VAD parameters have been assigned by default.
-    # if vc_instance.vc_model.vad is not None:
-    #     vc_instance.vc_model.vad.vad.set_mode(vad_sensitivity)
-    #     vc_instance.vc_model.vad.frame_length = int(vc_instance.vc_model.sample_rate * (vad_frame_ms / 1000.0))
-
     clean_audio = params.get("clean_audio", False)
     clean_strength = params.get("clean_strength", 0.5)
 
@@ -106,7 +94,6 @@ async def change_config(ws: WebSocket):
         vc_instance.vc_model.board = None
         vc_instance.vc_model.kwargs = None
     elif post_process and vc_instance.vc_model.kwargs != kwargs:
-        # Post-process requires creating a new pendalboard.
         new_board = vc_instance.vc_model.setup_pedalboard(**kwargs)
         vc_instance.vc_model.board = new_board
         vc_instance.vc_model.kwargs = kwargs.copy()
@@ -116,14 +103,12 @@ async def change_config(ws: WebSocket):
         vc_instance.vc_model.model_path = model_pth
         vc_instance.vc_model.pipeline.vc.load_model(model_pth)
         vc_instance.vc_model.pipeline.vc.setup_network()
-        # Set a new version, otherwise it will crash.
         vc_instance.vc_model.pipeline.version = vc_instance.vc_model.pipeline.vc.version
 
     sid = params.get("sid", vc_instance.vc_model.pipeline.sid)
     if vc_instance.vc_model.pipeline.sid != sid:
         import torch
 
-        # This is for multi-SID models.
         vc_instance.vc_model.pipeline.torch_sid = torch.tensor(
             [sid], device=vc_instance.vc_model.pipeline.device, dtype=torch.int64
         )
@@ -277,7 +262,6 @@ async def websocket_audio(ws: WebSocket):
                 )
 
             if vc_instance is None:
-                # Avoid errors when disconnecting.
                 return
 
             audio_output, vol, perf = vc_instance.on_request(

@@ -1,3 +1,8 @@
+"""
+Base Synthesizer model combining a TextEncoder, PosteriorEncoder, normalizing flow
+and a selectable vocoder (HiFi-GAN, MRF HiFi-GAN, NSF HiFi-GAN or RefineGAN).
+"""
+
 import torch
 from typing import Optional
 from rvc.lib.algorithm.generators.hifigan_mrf import HiFiGANMRFGenerator
@@ -10,33 +15,6 @@ from rvc.lib.algorithm.encoders import TextEncoder, PosteriorEncoder
 
 
 class Synthesizer(torch.nn.Module):
-    """
-    Base Synthesizer model.
-
-    Args:
-        spec_channels (int): Number of channels in the spectrogram.
-        segment_size (int): Size of the audio segment.
-        inter_channels (int): Number of channels in the intermediate layers.
-        hidden_channels (int): Number of channels in the hidden layers.
-        filter_channels (int): Number of channels in the filter layers.
-        n_heads (int): Number of attention heads.
-        n_layers (int): Number of layers in the encoder.
-        kernel_size (int): Size of the convolution kernel.
-        p_dropout (float): Dropout probability.
-        resblock (str): Type of residual block.
-        resblock_kernel_sizes (list): Kernel sizes for the residual blocks.
-        resblock_dilation_sizes (list): Dilation sizes for the residual blocks.
-        upsample_rates (list): Upsampling rates for the decoder.
-        upsample_initial_channel (int): Number of channels in the initial upsampling layer.
-        upsample_kernel_sizes (list): Kernel sizes for the upsampling layers.
-        spk_embed_dim (int): Dimension of the speaker embedding.
-        gin_channels (int): Number of channels in the global conditioning vector.
-        sr (int): Sampling rate of the audio.
-        use_f0 (bool): Whether to use F0 information.
-        text_enc_hidden_dim (int): Hidden dimension for the text encoder.
-        kwargs: Additional keyword arguments.
-    """
-
     def __init__(
         self,
         spec_channels: int,
@@ -181,7 +159,6 @@ class Synthesizer(torch.nn.Module):
         if y is not None:
             z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g)
             z_p = self.flow(z, y_mask, g=g)
-            # regular old training method using random slices
             if self.randomized:
                 z_slice, ids_slice = rand_slice_segments(
                     z, y_lengths, self.segment_size
@@ -192,7 +169,6 @@ class Synthesizer(torch.nn.Module):
                 else:
                     o = self.dec(z_slice, g=g)
                 return o, ids_slice, x_mask, y_mask, (z, z_p, m_p, logs_p, m_q, logs_q)
-            # future use for finetuning using the entire dataset each pass
             else:
                 if self.use_f0:
                     o = self.dec(z, pitchf, g=g)
@@ -212,17 +188,6 @@ class Synthesizer(torch.nn.Module):
         sid: torch.Tensor = None,
         rate: Optional[torch.Tensor] = None,
     ):
-        """
-        Inference of the model.
-
-        Args:
-            phone (torch.Tensor): Phoneme sequence.
-            phone_lengths (torch.Tensor): Lengths of the phoneme sequences.
-            pitch (torch.Tensor, optional): Pitch sequence.
-            nsff0 (torch.Tensor, optional): Fine-grained pitch sequence.
-            sid (torch.Tensor): Speaker embedding.
-            rate (torch.Tensor, optional): Rate for time-stretching.
-        """
         g = self.emb_g(sid).unsqueeze(-1)
         m_p, logs_p, x_mask = self.enc_p(phone, pitch, phone_lengths)
         z_p = (m_p + torch.exp(logs_p) * torch.randn_like(m_p) * 0.66666) * x_mask

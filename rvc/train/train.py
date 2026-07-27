@@ -1,3 +1,7 @@
+"""RVC training entry point: parses CLI args, sets up distributed multi-GPU training,
+runs the generator/discriminator training loop with mel/KL/feature/adversarial losses,
+handles checkpointing, TensorBoard logging, overtraining detection, and model export."""
+
 import os
 import sys
 
@@ -39,12 +43,10 @@ from utils import (
     summarize,
 )
 
-# Zluda hijack
 import rvc.lib.zluda
 from rvc.lib.algorithm import commons
 from rvc.train.process.extract_model import extract_model
 
-# Parse command line arguments
 model_name = sys.argv[1]
 save_every_epoch = int(sys.argv[2])
 total_epoch = int(sys.argv[3])
@@ -61,7 +63,6 @@ overtraining_threshold = int(sys.argv[13])
 cleanup = strtobool(sys.argv[14])
 vocoder = sys.argv[15]
 checkpointing = strtobool(sys.argv[16])
-# experimental settings
 randomized = True
 d_lr_coeff = 1.0
 g_lr_coeff = 1.0
@@ -144,17 +145,11 @@ logging.getLogger("torch").setLevel(logging.ERROR)
 
 
 class EpochRecorder:
-    """
-    Records the time elapsed per epoch.
-    """
 
     def __init__(self):
         self.last_time = ttime()
 
     def record(self):
-        """
-        Records the elapsed time and returns a formatted string.
-        """
         now_time = ttime()
         elapsed_time = now_time - self.last_time
         self.last_time = now_time
@@ -165,14 +160,10 @@ class EpochRecorder:
 
 
 def main():
-    """
-    Main function to start the training process.
-    """
     global training_file_path, last_loss_gen_all, smoothed_loss_gen_history, loss_gen_history, loss_disc_history, smoothed_loss_disc_history, overtrain_save_epoch, gpus
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(randint(20000, 55555))
-    # Check sample rate
     wavs = glob.glob(
         os.path.join(os.path.join(experiment_dir, "sliced_audios"), "*.wav")
     )
@@ -201,9 +192,6 @@ def main():
         print("Training with CPU, this will take a long time.")
 
     def start():
-        """
-        Starts the training process with multi-GPU support or CPU.
-        """
         children = []
         pid_data = {"process_pids": []}
         with open(config_save_path, "r", encoding="utf-8") as pid_file:
@@ -238,12 +226,6 @@ def main():
             children[i].join()
 
     def load_from_json(file_path):
-        """
-        Load data from a JSON file.
-
-        Args:
-            file_path (str): The path to the JSON file.
-        """
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -256,12 +238,6 @@ def main():
         return [], [], [], []
 
     def continue_overtrain_detector(training_file_path):
-        """
-        Continues the overtrain detector by loading the training history from a JSON file.
-
-        Args:
-            training_file_path (str): The file path of the JSON file containing the training history.
-        """
         if overtraining_detector:
             if os.path.exists(training_file_path):
                 (
@@ -274,7 +250,6 @@ def main():
     if cleanup:
         print("Removing files from the prior training attempt...")
 
-        # Clean up unnecessary files
         for root, dirs, files in os.walk(
             os.path.join(now_dir, "logs", model_name), topdown=False
         ):
@@ -315,20 +290,6 @@ def run(
     device,
     device_id,
 ):
-    """
-    Runs the training loop on a specific GPU or CPU.
-
-    Args:
-        rank (int): The rank of the current process within the distributed training setup.
-        n_gpus (int): The total number of GPUs available for training.
-        experiment_dir (str): The directory where experiment logs and checkpoints will be saved.
-        pretrainG (str): Path to the pre-trained generator model.
-        pretrainD (str): Path to the pre-trained discriminator model.
-        custom_total_epoch (int): The total number of epochs for training.
-        custom_save_every_weights (int): The interval (in epochs) at which to save model weights.
-        config (object): Configuration object containing training parameters.
-        device (torch.device): The device to use for training (CPU or GPU).
-    """
     global global_step, smoothed_value_gen, smoothed_value_disc
 
     smoothed_value_gen = 0
@@ -351,7 +312,6 @@ def run(
     if torch.cuda.is_available():
         torch.cuda.set_device(device_id)
 
-    # Create datasets and dataloaders
     from data_utils import (
         DistributedBucketSampler,
         TextAudioCollateMultiNSFsid,
@@ -380,16 +340,14 @@ def run(
         prefetch_factor=8,
     )
 
-    # Validations
     if len(train_loader) < 3:
         print(
             "Not enough data present in the training set. Perhaps you forgot to slice the audio files in preprocess?"
         )
         os._exit(2333333)
 
-    # defaults
     embedder_name = "contentvec"
-    spk_dim = config.model.spk_embed_dim  # 109 default speakers
+    spk_dim = config.model.spk_embed_dim
 
     try:
         with open(model_info_path, "r", encoding="utf-8") as f:
@@ -399,7 +357,6 @@ def run(
     except Exception as e:
         print(f"Could not load model info file: {e}. Using defaults.")
 
-    # Try to load speaker dim from latest checkpoint or pretrainG
     try:
         last_g = latest_checkpoint_path(experiment_dir, "G_*.pth")
         chk_path = (
@@ -413,11 +370,9 @@ def run(
     except Exception as e:
         print(f"Failed to load checkpoint: {e}. Using default number of speakers.")
 
-    # update config before the model init
     print(f"Initializing the generator with {spk_dim} speakers.")
     config.model.spk_embed_dim = spk_dim
 
-    # Initialize models and optimizers
     from rvc.lib.algorithm.discriminators import MultiPeriodDiscriminator
     from rvc.lib.algorithm.synthesizers import Synthesizer
 
@@ -473,7 +428,6 @@ def run(
         fn_mel_loss = torch.nn.L1Loss()
         print("Using Single-Scale Mel loss function")
 
-    # Wrap models with DDP for multi-gpu processing
     if n_gpus > 1 and device.type == "cuda":
         net_g = DDP(net_g, device_ids=[device_id])
         net_d = DDP(net_d, device_ids=[device_id])
@@ -483,7 +437,6 @@ def run(
     elif rank == 0 and train_dtype == torch.float16:
         print("Using Float16 for training.")
 
-    # Load checkpoint if available
     scaler_dict = {}
     try:
         print("Starting training...")
@@ -538,7 +491,6 @@ def run(
                 print(e)
                 sys.exit(1)
 
-    # Initialize schedulers
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(
         optim_g, gamma=config.train.lr_decay, last_epoch=epoch_str - 2
     )
@@ -552,19 +504,15 @@ def run(
         scaler.load_state_dict(scaler_dict)
 
     cache = []
-    # collect the reference audio for tensorboard evaluation
     if os.path.isfile(os.path.join("logs", "reference", embedder_name, "feats.npy")):
         print("Using", embedder_name, "reference set for validation")
         phone = np.load(os.path.join("logs", "reference", embedder_name, "feats.npy"))
-        # expanding x2 to match pitch size
         phone = np.repeat(phone, 2, axis=0)
         phone_lengths = torch.LongTensor([phone.shape[0]]).to(device)
         phone = torch.FloatTensor(phone).unsqueeze(0).to(device)
         pitch = np.load(os.path.join("logs", "reference", "pitch_coarse.npy"))
-        # removed last frame to match features
         pitch = torch.LongTensor(pitch[:-1]).unsqueeze(0).to(device)
         pitchf = np.load(os.path.join("logs", "reference", "pitch_fine.npy"))
-        # removed last frame to match features
         pitchf = torch.FloatTensor(pitchf[:-1]).unsqueeze(0).to(device)
         sid = torch.LongTensor([0]).to(device)
         reference = (
@@ -626,20 +574,6 @@ def train_and_evaluate(
     fn_mel_loss,
     scaler,
 ):
-    """
-    Trains and evaluates the model for one epoch.
-
-    Args:
-        rank (int): Rank of the current process.
-        epoch (int): Current epoch number.
-        hps (Namespace): Hyperparameters.
-        nets (list): List of models [net_g, net_d].
-        optims (list): List of optimizers [optim_g, optim_d].
-        loaders (list): List of dataloaders [train_loader, eval_loader].
-        writers (list): List of TensorBoard writers [writer_eval].
-        cache (list): List to cache data in GPU memory.
-        use_cpu (bool): Whether to use CPU for training.
-    """
     global global_step, lowest_value, loss_disc, consecutive_increases_gen, consecutive_increases_disc, smoothed_value_gen, smoothed_value_disc
 
     if epoch == 1:
@@ -662,12 +596,10 @@ def train_and_evaluate(
         train_dtype == torch.bfloat16 or train_dtype == torch.float16
     )
 
-    # Data caching
     if device.type == "cuda" and cache_data_in_gpu:
         data_iterator = cache
         if cache == []:
             for batch_idx, info in enumerate(train_loader):
-                # phone, phone_lengths, pitch, pitchf, spec, spec_lengths, wave, wave_lengths, sid
                 info = [tensor.cuda(device_id, non_blocking=True) for tensor in info]
                 cache.append((batch_idx, info))
         else:
@@ -682,7 +614,6 @@ def train_and_evaluate(
                 info = [tensor.cuda(device_id, non_blocking=True) for tensor in info]
             elif device.type != "cuda":
                 info = [tensor.to(device) for tensor in info]
-            # else iterator is going thru a cached list with a device already assigned
 
             (
                 phone,
@@ -699,14 +630,12 @@ def train_and_evaluate(
             with torch.amp.autocast(
                 device_type="cuda", enabled=use_amp, dtype=train_dtype
             ):
-                # Forward pass
                 model_output = net_g(
                     phone, phone_lengths, pitch, pitchf, spec, spec_lengths, sid
                 )
                 y_hat, ids_slice, x_mask, z_mask, (z, z_p, m_p, logs_p, m_q, logs_q) = (
                     model_output
                 )
-                # slice of the original waveform to match a generate slice
                 if randomized:
                     wave = commons.slice_segments(
                         wave,
@@ -714,13 +643,12 @@ def train_and_evaluate(
                         config.train.segment_size,
                         dim=3,
                     )
-            for _ in range(d_step_per_g_step):  # default x1
+            for _ in range(d_step_per_g_step):
                 with torch.amp.autocast(
                     device_type="cuda", enabled=use_amp, dtype=train_dtype
                 ):
                     y_d_hat_r, y_d_hat_g, _, _ = net_d(wave, y_hat.detach())
                 loss_disc, _, _ = discriminator_loss(y_d_hat_r, y_d_hat_g)
-                # Discriminator backward and update
                 optim_d.zero_grad()
                 if train_dtype == torch.float16:
                     scaler.scale(loss_disc).backward()
@@ -735,7 +663,6 @@ def train_and_evaluate(
             with torch.amp.autocast(
                 device_type="cuda", enabled=use_amp, dtype=train_dtype
             ):
-                # Generator backward and update
                 _, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
 
             if multiscale_mel_loss:
@@ -787,7 +714,6 @@ def train_and_evaluate(
 
             global_step += 1
 
-            # queue for rolling losses over 50 steps
             avg_losses["grad_d_50"].append(grad_norm_d)
             avg_losses["grad_g_50"].append(grad_norm_g)
             avg_losses["disc_loss_50"].append(loss_disc.detach())
@@ -798,7 +724,6 @@ def train_and_evaluate(
             avg_losses["gen_loss_50"].append(loss_gen_all.detach())
 
             if rank == 0 and global_step % 50 == 0:
-                # logging rolling averages
                 scalar_dict = {
                     "grad_avg_50/norm_d": sum(avg_losses["grad_d_50"])
                     / len(avg_losses["grad_d_50"]),
@@ -830,14 +755,10 @@ def train_and_evaluate(
                 )
 
             pbar.update(1)
-        # end of batch train
-    # end of tqdm
     with torch.no_grad():
         torch.cuda.empty_cache()
 
-    # Logging and checkpointing
     if rank == 0:
-        # used for tensorboard chart - all/mel
         mel = spec_to_mel_torch(
             spec,
             config.data.filter_length,
@@ -846,7 +767,6 @@ def train_and_evaluate(
             config.data.mel_fmin,
             config.data.mel_fmax,
         )
-        # used for tensorboard chart - slice/mel_org
         if randomized:
             y_mel = commons.slice_segments(
                 mel,
@@ -856,7 +776,6 @@ def train_and_evaluate(
             )
         else:
             y_mel = mel
-        # used for tensorboard chart - slice/mel_gen
         y_hat_mel = mel_spectrogram_torch(
             y_hat.float().squeeze(1),
             config.data.filter_length,
@@ -914,23 +833,18 @@ def train_and_evaluate(
                 scalars=scalar_dict,
             )
 
-    # Save checkpoint
     model_add = []
     model_del = []
     done = False
 
     if rank == 0:
         overtrain_info = ""
-        # Check overtraining
         if overtraining_detector and rank == 0 and epoch > 1:
-            # Add the current loss to the history
             current_loss_disc = float(loss_disc)
             loss_disc_history.append(current_loss_disc)
-            # Update smoothed loss history with loss_disc
             smoothed_value_disc = update_exponential_moving_average(
                 smoothed_loss_disc_history, current_loss_disc
             )
-            # Check overtraining with smoothed loss_disc
             is_overtraining_disc = check_overtraining(
                 smoothed_loss_disc_history, overtraining_threshold * 2
             )
@@ -938,14 +852,11 @@ def train_and_evaluate(
                 consecutive_increases_disc += 1
             else:
                 consecutive_increases_disc = 0
-            # Add the current loss_gen to the history
             current_loss_gen = float(lowest_value["value"])
             loss_gen_history.append(current_loss_gen)
-            # Update the smoothed loss_gen history
             smoothed_value_gen = update_exponential_moving_average(
                 smoothed_loss_gen_history, current_loss_gen
             )
-            # Check for overtraining with the smoothed loss_gen
             is_overtraining_gen = check_overtraining(
                 smoothed_loss_gen_history, overtraining_threshold, 0.01
             )
@@ -954,7 +865,6 @@ def train_and_evaluate(
             else:
                 consecutive_increases_gen = 0
             overtrain_info = f"Smoothed loss_g {smoothed_value_gen:.3f} and loss_d {smoothed_value_disc:.3f}"
-            # Save the data in the JSON file if the epoch is divisible by save_every_epoch
             if epoch % save_every_epoch == 0:
                 save_to_json(
                     training_file_path,
@@ -990,7 +900,6 @@ def train_and_evaluate(
                     )
                 )
 
-        # Print training progress
         lowest_value_rounded = float(lowest_value["value"])
         lowest_value_rounded = round(lowest_value_rounded, 3)
 
@@ -1012,7 +921,6 @@ def train_and_evaluate(
             )
         print(record)
 
-        # Save weights every N epochs
         if epoch % save_every_epoch == 0:
             checkpoint_suffix = f"{2333333 if save_only_latest else global_step}.pth"
             save_checkpoint(
@@ -1038,7 +946,6 @@ def train_and_evaluate(
                     )
                 )
 
-        # Check completion
         if epoch >= custom_total_epoch:
             lowest_value_rounded = float(lowest_value["value"])
             lowest_value_rounded = round(lowest_value_rounded, 3)
@@ -1048,7 +955,6 @@ def train_and_evaluate(
             print(
                 f"Lowest generator loss: {lowest_value_rounded} at epoch {lowest_value['epoch']}, step {lowest_value['step']}"
             )
-            # Final model
             model_add.append(
                 os.path.join(
                     experiment_dir, f"{model_name}_{epoch}e_{global_step}s.pth"
@@ -1056,7 +962,6 @@ def train_and_evaluate(
             )
             done = True
 
-        # Clean-up old best epochs
         for m in model_del:
             os.remove(m)
 
@@ -1081,7 +986,6 @@ def train_and_evaluate(
                     )
 
         if done:
-            # Clean-up process IDs from config.json
             pid_file_path = os.path.join(experiment_dir, "config.json")
             with open(pid_file_path, "r", encoding="utf-8") as pid_file:
                 pid_data = json.load(pid_file)
@@ -1095,14 +999,6 @@ def train_and_evaluate(
 
 
 def check_overtraining(smoothed_loss_history, threshold, epsilon=0.004):
-    """
-    Checks for overtraining based on the smoothed loss history.
-
-    Args:
-        smoothed_loss_history (list): List of smoothed losses for each epoch.
-        threshold (int): Number of consecutive epochs with insignificant changes or increases to consider overtraining.
-        epsilon (float): The maximum change considered insignificant.
-    """
     if len(smoothed_loss_history) < threshold + 1:
         return False
 
@@ -1117,14 +1013,6 @@ def check_overtraining(smoothed_loss_history, threshold, epsilon=0.004):
 def update_exponential_moving_average(
     smoothed_loss_history, new_value, smoothing=0.987
 ):
-    """
-    Updates the exponential moving average with a new value.
-
-    Args:
-        smoothed_loss_history (list): List of smoothed values.
-        new_value (float): New value to be added.
-        smoothing (float): Smoothing factor.
-    """
     if smoothed_loss_history:
         smoothed_value = (
             smoothing * smoothed_loss_history[-1] + (1 - smoothing) * new_value
@@ -1142,9 +1030,6 @@ def save_to_json(
     loss_gen_history,
     smoothed_loss_gen_history,
 ):
-    """
-    Save the training history to a JSON file.
-    """
     data = {
         "loss_disc_history": loss_disc_history,
         "smoothed_loss_disc_history": smoothed_loss_disc_history,

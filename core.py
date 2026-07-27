@@ -22,8 +22,7 @@ from rvc.lib.tools.model_download import model_download_pipeline
 python = sys.executable
 
 
-# Get TTS Voices -> https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
-@lru_cache(maxsize=1)  # Cache only one result since the file is static
+@lru_cache(maxsize=1)
 def load_voices_data():
     with open(
         os.path.join("rvc", "lib", "tools", "tts_voices.json"), "r", encoding="utf-8"
@@ -49,7 +48,6 @@ def get_config():
     return Config()
 
 
-# Infer
 def run_infer_script(
     pitch: int,
     index_rate: float,
@@ -183,7 +181,6 @@ def run_infer_script(
     )
 
 
-# Batch infer
 def run_batch_infer_script(
     pitch: int,
     index_rate: float,
@@ -316,7 +313,6 @@ def run_batch_infer_script(
     return f"Files from {input_folder} inferred successfully."
 
 
-# TTS
 def run_tts_script(
     tts_file: str,
     tts_text: str,
@@ -410,7 +406,6 @@ def run_tts_script(
     )
 
 
-# Preprocess
 def run_preprocess_script(
     model_name: str,
     dataset_path: str,
@@ -449,7 +444,6 @@ def run_preprocess_script(
     return f"Model {model_name} preprocessed successfully."
 
 
-# Extract
 def run_extract_script(
     model_name: str,
     f0_method: str,
@@ -487,7 +481,6 @@ def run_extract_script(
     return f"Model {model_name} extracted successfully."
 
 
-# Train
 def run_train_script(
     model_name: str,
     save_every_epoch: int,
@@ -555,7 +548,6 @@ def run_train_script(
     return f"Model {model_name} trained successfully."
 
 
-# Index
 def run_index_script(model_name: str, index_algorithm: str):
     index_script_path = os.path.join("rvc", "train", "process", "extract_index.py")
     command = [
@@ -569,13 +561,11 @@ def run_index_script(model_name: str, index_algorithm: str):
     return f"Index file for {model_name} generated successfully."
 
 
-# Model information
 def run_model_information_script(pth_path: str):
     print(model_information(pth_path))
     return model_information(pth_path)
 
 
-# Model blender
 def run_model_blender_script(
     model_name: str, pth_path_1: str, pth_path_2: str, ratio: float
 ):
@@ -583,18 +573,15 @@ def run_model_blender_script(
     return message, model_blended
 
 
-# Tensorboard
 def run_tensorboard_script():
     launch_tensorboard_pipeline()
 
 
-# Download
 def run_download_script(model_link: str):
     model_download_pipeline(model_link)
     return f"Model downloaded successfully."
 
 
-# Prerequisites
 def run_prerequisites_script(
     pretraineds_hifigan: bool,
     models: bool,
@@ -608,7 +595,6 @@ def run_prerequisites_script(
     return "Prerequisites installed successfully."
 
 
-# Audio analyzer
 def run_audio_analyzer_script(
     input_path: str, save_plot_path: str = "logs/audio_analysis.png"
 ):
@@ -620,7 +606,6 @@ def run_audio_analyzer_script(
     return audio_info, plot_path
 
 
-# Parse arguments
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Run the main.py script with specific parameters."
@@ -629,7 +614,6 @@ def parse_arguments():
         title="subcommands", dest="mode", help="Choose a mode"
     )
 
-    # Parser for 'infer' mode
     infer_parser = subparsers.add_parser("infer", help="Run inference")
     pitch_description = (
         "Set the pitch of the audio. Higher values result in a higher pitch."
@@ -1156,7 +1140,6 @@ def parse_arguments():
         required=False,
     )
 
-    # Parser for 'batch_infer' mode
     batch_infer_parser = subparsers.add_parser(
         "batch_infer",
         help="Run batch inference",
@@ -1624,7 +1607,6 @@ def parse_arguments():
         required=False,
     )
 
-    # Parser for 'tts' mode
     tts_parser = subparsers.add_parser("tts", help="Run TTS inference")
     tts_parser.add_argument(
         "--tts_file", type=str, help="File with a text to be synthesized", required=True
@@ -1788,7 +1770,6 @@ def parse_arguments():
         default=None,
     )
 
-    # Parser for 'preprocess' mode
     preprocess_parser = subparsers.add_parser(
         "preprocess", help="Preprocess a dataset for training."
     )
@@ -1868,7 +1849,6 @@ def parse_arguments():
         required=False,
     )
 
-    # Parser for 'extract' mode
     extract_parser = subparsers.add_parser(
         "extract", help="Extract features from a dataset."
     )
@@ -1937,7 +1917,6 @@ def parse_arguments():
         required=True,
     )
 
-    # Parser for 'train' mode
     train_parser = subparsers.add_parser("train", help="Train an RVC model.")
     train_parser.add_argument(
         "--model_name", type=str, help="Name of the model to be trained.", required=True
@@ -2070,7 +2049,6 @@ def parse_arguments():
         required=False,
     )
 
-    # Parser for 'index' mode
     index_parser = subparsers.add_parser(
         "index", help="Generate an index file for an RVC model."
     )
@@ -2086,7 +2064,6 @@ def parse_arguments():
         required=False,
     )
 
-    # Parser for 'model_information' mode
     model_information_parser = subparsers.add_parser(
         "model_information", help="Display information about a trained model."
     )
@@ -2094,7 +2071,6 @@ def parse_arguments():
         "--pth_path", type=str, help="Path to the .pth model file.", required=True
     )
 
-    # Parser for 'model_blender' mode
     model_blender_parser = subparsers.add_parser(
         "model_blender", help="Fuse two RVC models together."
     )
@@ -2121,12 +2097,10 @@ def parse_arguments():
         default=0.5,
     )
 
-    # Parser for 'tensorboard' mode
     subparsers.add_parser(
         "tensorboard", help="Launch TensorBoard for monitoring training progress."
     )
 
-    # Parser for 'download' mode
     download_parser = subparsers.add_parser(
         "download", help="Download a model from a provided link."
     )
@@ -2134,7 +2108,6 @@ def parse_arguments():
         "--model_link", type=str, help="Direct link to the model file.", required=True
     )
 
-    # Parser for 'prerequisites' mode
     prerequisites_parser = subparsers.add_parser(
         "prerequisites", help="Install prerequisites for RVC."
     )
@@ -2160,7 +2133,6 @@ def parse_arguments():
         help="Download required executables.",
     )
 
-    # Parser for 'audio_analyzer' mode
     audio_analyzer = subparsers.add_parser(
         "audio_analyzer", help="Analyze an audio file."
     )

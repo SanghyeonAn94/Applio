@@ -40,16 +40,12 @@ def check_the_device(device, type: str = "input"):
 
 
 def list_audio_device():
-    """
-    Function to query audio devices and host api.
-    """
     try:
         audio_device_list = sd.query_devices()
     except Exception as e:
         print("An error occurred while querying the audio device:", e)
         audio_device_list = []
     except OSError as e:
-        # This error can occur when the libportaudio2 library is missing.
         print("An error occurred while querying the audio device:", e)
         audio_device_list = []
 
@@ -70,7 +66,6 @@ def list_audio_device():
         print("An error occurred while querying the host api:", e)
         hostapis = []
     except OSError as e:
-        # This error can occur when the libportaudio2 library is missing.
         print("An error occurred while querying the host api:", e)
         hostapis = []
 
@@ -170,8 +165,7 @@ class Audio:
     def process_data_with_time(self, indata: np.ndarray):
         out_wav, vol, perf, _ = self.process_data(indata)
         performance_ms = perf[1]
-        # print(f"real-time voice conversion performance: {performance_ms:.2f} ms")
-        self.latency = performance_ms  # latency to display on the application interface
+        self.latency = performance_ms
         self.volume = vol
 
         return out_wav
@@ -234,7 +228,6 @@ class Audio:
         output_monitor_extra_setting,
     ):
         if input_device_id != output_device_id:
-            # Only use in cases involving different backends devices.
             self.input_stream = sd.InputStream(
                 callback=self.audio_stream_no_output_callback,
                 latency="low",

@@ -1,3 +1,6 @@
+"""Training utilities: checkpoint load/save (with backwards-compatible key remapping),
+TensorBoard summaries, spectrogram plotting, audio/file loading, and the HParams container."""
+
 import os
 import glob
 import torch
@@ -10,14 +13,6 @@ MATPLOTLIB_FLAG = False
 
 
 def replace_keys_in_dict(d, old_key_part, new_key_part):
-    """
-    Recursively replace parts of the keys in a dictionary.
-
-    Args:
-        d (dict or OrderedDict): The dictionary to update.
-        old_key_part (str): The part of the key to replace.
-        new_key_part (str): The new part of the key.
-    """
     updated_dict = OrderedDict() if isinstance(d, OrderedDict) else {}
     for key, value in d.items():
         new_key = (
@@ -32,15 +27,6 @@ def replace_keys_in_dict(d, old_key_part, new_key_part):
 
 
 def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
-    """
-    Load a checkpoint into a model and optionally the optimizer.
-
-    Args:
-        checkpoint_path (str): Path to the checkpoint file.
-        model (torch.nn.Module): The model to load the checkpoint into.
-        optimizer (torch.optim.Optimizer, optional): The optimizer to load the state from. Defaults to None.
-        load_opt (int, optional): Whether to load the optimizer state. Defaults to 1.
-    """
     assert os.path.isfile(
         checkpoint_path
     ), f"Checkpoint file not found: {checkpoint_path}"
@@ -54,7 +40,6 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
         ".parametrizations.weight.original0",
     )
 
-    # Update model state_dict
     model_state_dict = (
         model.module.state_dict() if hasattr(model, "module") else model.state_dict()
     )
@@ -62,7 +47,6 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
         k: checkpoint_dict["model"].get(k, v) for k, v in model_state_dict.items()
     }
 
-    # Load state_dict into model
     if hasattr(model, "module"):
         model.module.load_state_dict(new_state_dict, strict=False)
     else:
@@ -86,16 +70,6 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
 def save_checkpoint(
     model, optimizer, learning_rate, iteration, checkpoint_path, scaler
 ):
-    """
-    Save the model and optimizer state to a checkpoint file.
-
-    Args:
-        model (torch.nn.Module): The model to save.
-        optimizer (torch.optim.Optimizer): The optimizer to save the state of.
-        learning_rate (float): The current learning rate.
-        iteration (int): The current iteration.
-        checkpoint_path (str): The path to save the checkpoint to.
-    """
     state_dict = (
         model.module.state_dict() if hasattr(model, "module") else model.state_dict()
     )
@@ -107,7 +81,6 @@ def save_checkpoint(
         "scaler": scaler.state_dict(),
     }
 
-    # Create a backwards-compatible checkpoint
     torch.save(
         replace_keys_in_dict(
             replace_keys_in_dict(
@@ -131,18 +104,6 @@ def summarize(
     audios={},
     audio_sample_rate=22050,
 ):
-    """
-    Log various summaries to a TensorBoard writer.
-
-    Args:
-        writer (SummaryWriter): The TensorBoard writer.
-        global_step (int): The current global step.
-        scalars (dict, optional): Dictionary of scalar values to log.
-        histograms (dict, optional): Dictionary of histogram values to log.
-        images (dict, optional): Dictionary of image values to log.
-        audios (dict, optional): Dictionary of audio values to log.
-        audio_sample_rate (int, optional): Sampling rate of the audio data.
-    """
     for k, v in scalars.items():
         writer.add_scalar(k, v, global_step)
     for k, v in histograms.items():
@@ -154,13 +115,6 @@ def summarize(
 
 
 def latest_checkpoint_path(dir_path, regex="G_*.pth"):
-    """
-    Get the latest checkpoint file in a directory.
-
-    Args:
-        dir_path (str): The directory to search for checkpoints.
-        regex (str, optional): The regular expression to match checkpoint files.
-    """
     checkpoints = sorted(
         glob.glob(os.path.join(dir_path, regex)),
         key=lambda f: int("".join(filter(str.isdigit, f))),
@@ -169,12 +123,6 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
 
 
 def plot_spectrogram_to_numpy(spectrogram):
-    """
-    Convert a spectrogram to a NumPy array for visualization.
-
-    Args:
-        spectrogram (numpy.ndarray): The spectrogram to plot.
-    """
     global MATPLOTLIB_FLAG
     if not MATPLOTLIB_FLAG:
         plt.switch_backend("Agg")
@@ -197,33 +145,16 @@ def plot_spectrogram_to_numpy(spectrogram):
 
 
 def load_wav_to_torch(full_path):
-    """
-    Load a WAV file into a PyTorch tensor.
-
-    Args:
-        full_path (str): The path to the WAV file.
-    """
     data, sample_rate = sf.read(full_path, dtype="float32")
     return torch.FloatTensor(data), sample_rate
 
 
 def load_filepaths_and_text(filename, split="|"):
-    """
-    Load filepaths and associated text from a file.
-
-    Args:
-        filename (str): The path to the file.
-        split (str, optional): The delimiter used to split the lines.
-    """
     with open(filename, encoding="utf-8") as f:
         return [line.strip().split(split) for line in f]
 
 
 class HParams:
-    """
-    A class for storing and accessing hyperparameters.
-    """
-
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             self[k] = HParams(**v) if isinstance(v, dict) else v

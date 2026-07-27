@@ -22,9 +22,6 @@ import runpod
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Default follows the code instead of naming a fixed image path, so it stays
-# correct wherever the checkout is installed (/srv/applio, /app/Applio, a dev
-# clone). app/handler.py -> parents[1] is the Applio repo root.
 _REPO_ROOT = str(pathlib.Path(__file__).resolve().parents[1])
 
 APPLIO_BASE_DIR = os.environ.get("APPLIO_BASE_DIR", _REPO_ROOT)
@@ -40,22 +37,10 @@ from core import run_infer_script
 
 
 def _download_artifact(uri: str, suffix: str) -> str:
-    """Download an S3 URI to a tempfile and return the local path."""
     return s3_utils.download_to_temp(uri, suffix=suffix)
 
 
 def _action_convert(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Voice conversion.
-
-    Required: ``input_audio``, ``pth_path`` (both ``s3://``).
-    Optional: ``index_path`` (``s3://``), ``output_s3`` (upload target),
-    conversion knobs (``pitch``, ``index_rate``, ``volume_envelope``,
-    ``protect``, ``f0_method``, ``export_format``, ``embedder_model``,
-    ``clean_audio``, ``clean_strength``, ``split_audio``, ``f0_autotune``,
-    ``f0_autotune_strength``, ``proposed_pitch``, ``proposed_pitch_threshold``,
-    ``post_process``), and a ``return_base64`` flag (default False) to get
-    the wav inline instead of uploading.
-    """
     input_uri = payload.get("input_audio")
     pth_uri = payload.get("pth_path")
     if not input_uri or not pth_uri:

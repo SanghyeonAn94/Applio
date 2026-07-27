@@ -1,3 +1,5 @@
+"""File download helpers with support for Google Drive links, cookies, and resuming."""
+
 import os
 import re
 import sys
@@ -16,18 +18,16 @@ HOME = os.path.expanduser("~")
 
 
 def indent(text: str, prefix: str):
-    """Indent each non-empty line of text with the given prefix."""
     return "".join(
         (prefix + line if line.strip() else line) for line in text.splitlines(True)
     )
 
 
 class FileURLRetrievalError(Exception):
-    """Custom exception for issues retrieving file URLs."""
+    pass
 
 
 def _extract_download_url_from_confirmation(contents: str, url_origin: str):
-    """Extract the download URL from a Google Drive confirmation page."""
     patterns = [
         r'href="(\/uc\?export=download[^"]+)',
         r'href="/open\?id=([^"]+)"',
@@ -75,7 +75,6 @@ def _create_session(
     use_cookies: bool = True,
     return_cookies_file: bool = False,
 ):
-    """Create a requests session with optional proxy and cookie handling."""
     sess = requests.session()
     sess.headers.update(
         {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6)"}
@@ -110,24 +109,6 @@ def download(
     format: Optional[str] = None,
     url: Optional[str] = None,
 ):
-    """Download a file from a URL, supporting Google Drive links.
-
-    Args:
-        output: Output filepath. Default is basename of URL.
-        quiet: Suppress terminal output.
-        proxy: HTTP/HTTPS proxy.
-        speed: Download speed limit (bytes per second).
-        use_cookies: Flag to use cookies.
-        verify: Verify TLS certificates.
-        id: Google Drive's file ID.
-        fuzzy: Fuzzy Google Drive ID extraction.
-        resume: Resume download from a tmp file.
-        format: Format for Google Docs/Sheets/Slides.
-        url: URL to download from.
-
-    Returns:
-        Output filename, or None on error.
-    """
     if not (id is None) ^ (url is None):
         raise ValueError("Either url or id has to be specified")
 
