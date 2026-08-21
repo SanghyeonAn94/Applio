@@ -440,7 +440,7 @@ def run_preprocess_script(
             ],
         ),
     ]
-    subprocess.run(command)
+    subprocess.run(command, check=True)
     return f"Model {model_name} preprocessed successfully."
 
 
@@ -476,7 +476,7 @@ def run_extract_script(
         ),
     ]
 
-    subprocess.run(command_1)
+    subprocess.run(command_1, check=True)
 
     return f"Model {model_name} extracted successfully."
 
@@ -543,7 +543,7 @@ def run_train_script(
             ],
         ),
     ]
-    subprocess.run(command)
+    subprocess.run(command, check=True)
     run_index_script(model_name, index_algorithm)
     return f"Model {model_name} trained successfully."
 
@@ -557,7 +557,7 @@ def run_index_script(model_name: str, index_algorithm: str):
         index_algorithm,
     ]
 
-    subprocess.run(command)
+    subprocess.run(command, check=True)
     return f"Index file for {model_name} generated successfully."
 
 

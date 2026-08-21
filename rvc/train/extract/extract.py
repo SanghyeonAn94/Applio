@@ -112,7 +112,8 @@ def run_pitch_extraction(files, devices, f0_method, threads):
             )
             for i in range(len(devices))
         ]
-        concurrent.futures.wait(tasks)
+        for task in concurrent.futures.as_completed(tasks):
+            task.result()
 
     print(f"Pitch extraction completed in {time.time() - start_time:.2f} seconds.")
 
@@ -141,7 +142,8 @@ def process_file_embedding(
     with tqdm.tqdm(total=len(files), leave=True, position=device_num) as pbar:
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as executor:
             futures = [executor.submit(worker, f) for f in files]
-            for _ in concurrent.futures.as_completed(futures):
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
                 pbar.update(1)
 
 
@@ -166,7 +168,8 @@ def run_embedding_extraction(
             )
             for i in range(len(devices))
         ]
-        concurrent.futures.wait(tasks)
+        for task in concurrent.futures.as_completed(tasks):
+            task.result()
 
     print(f"Embedding extraction completed in {time.time() - start_time:.2f} seconds.")
 

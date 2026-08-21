@@ -45,6 +45,7 @@ os.chdir(APPLIO_BASE_DIR)
 sys.path.insert(0, APPLIO_BASE_DIR)
 
 from app import s3_utils
+from app.stage_guard import require_output
 from core import run_preprocess_script, run_extract_script, run_train_script
 
 _PROGRESS_LOCK = threading.Lock()
@@ -146,6 +147,10 @@ def _train(event: Dict[str, Any], inp: Dict[str, Any]) -> Dict[str, Any]:
             normalization_mode=training_config.get("normalization_mode", "none"),
         )
 
+        require_output("preprocess", raw_dir, os.path.join(logs_model_dir, "sliced_audios"),
+                       in_suffix=(".wav", ".mp3", ".flac", ".ogg"),
+                       out_suffix=".wav")
+
         _set_progress(stage="extract", step=0)
         run_extract_script(
             model_name=model_name,
@@ -157,6 +162,12 @@ def _train(event: Dict[str, Any], inp: Dict[str, Any]) -> Dict[str, Any]:
             embedder_model_custom=training_config.get("embedder_model_custom"),
             include_mutes=int(training_config.get("include_mutes", 2)),
         )
+
+        require_output("extract:f0", os.path.join(logs_model_dir, "sliced_audios_16k"),
+                       os.path.join(logs_model_dir, "f0"), in_suffix=".wav", out_suffix=".npy")
+        require_output("extract:embeddings", os.path.join(logs_model_dir, "sliced_audios_16k"),
+                       os.path.join(logs_model_dir, "extracted"),
+                       in_suffix=".wav", out_suffix=".npy")
 
         _set_progress(stage="train", step=0)
         run_train_script(
