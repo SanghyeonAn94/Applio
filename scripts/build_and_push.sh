@@ -4,7 +4,6 @@ set -euo pipefail
 
 ECR_REPO="public.ecr.aws/r2p3x7v0/forge-applio"
 RUNPOD_TEMPLATES=(
-  "h606i8x4hu:inference"
   "q35j9l081f:training"
 )
 
