@@ -1,7 +1,7 @@
 """
 Applio FastAPI Server for Voice Conversion
 
-Similar to GPT-SoVITS api_v2.py structure, provides RESTful endpoints for:
+Provides RESTful endpoints for:
 - Voice conversion inference
 - Model weight switching
 - Health checks

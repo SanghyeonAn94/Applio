@@ -1,8 +1,7 @@
 """S3 helpers for Applio RunPod workers.
 
-Copy of the helpers shipped with the GPT-SoVITS handler so the two
-submodules can evolve independently. All helpers accept ``s3://bucket/key``
-URIs; callers never construct boto3 clients directly.
+All helpers accept ``s3://bucket/key`` URIs so callers never construct boto3
+clients directly.
 """
 import logging
 import os
