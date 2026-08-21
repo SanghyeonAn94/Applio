@@ -52,7 +52,7 @@ RUN grep -vE "^(torch|torchvision|torchaudio)==" /tmp/applio-requirements.txt \
         torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
         --extra-index-url https://download.pytorch.org/whl/cu128
 
-RUN pip install --no-cache-dir boto3 httpx runpod
+RUN pip install --no-cache-dir boto3 httpx runpod==1.10.0 && pip check
 
 COPY logs/mute /tmp/mute
 COPY logs/mute_spin /tmp/mute_spin
