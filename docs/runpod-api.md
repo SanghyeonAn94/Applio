@@ -1,27 +1,21 @@
 # Applio RunPod Serverless API
 
-Applio migrated from the on-prem FastAPI server (`:6969`) to RunPod
-Serverless. This document is the call contract clients (Forge
-`voice_service`) need to use.
-
-Two endpoints share a single image; `dockerArgs` selects the handler module:
+Applio training runs on RunPod Serverless. Inference runs on the persistent
+`voice-gen` pod and is outside this Serverless contract.
 
 | Endpoint | Command | Workers | Timeout |
 |---|---|---|---|
-| `forge-applio-inference` | `python -u -m app.handler` | `workersMin >= 1` | 10 min |
 | `forge-applio-training` | `python -u -m app.train_handler` | `workersMin = 0` | 6 hours |
 
 ## 1. Endpoints
 
 | Use | URL | Notes |
 |---|---|---|
-| Inference (sync) | `https://api.runpod.ai/v2/<inf-endpoint>/runsync` | 5-minute hard cap |
-| Inference (async) | `https://api.runpod.ai/v2/<inf-endpoint>/run` | returns `{id}`, poll `/status/{id}` |
 | Training (async) | `https://api.runpod.ai/v2/<train-endpoint>/run` | always async (5–30 min) |
 | Job status | `https://api.runpod.ai/v2/<endpoint>/status/{job_id}` | progress included for training |
 
-Endpoint ids are provisioned out-of-band and passed to `voice_service` via
-`APPLIO_INFERENCE_ENDPOINT_ID` / `APPLIO_TRAINING_ENDPOINT_ID`.
+The endpoint id is provisioned out-of-band and passed to `voice_service` via
+`APPLIO_TRAINING_ENDPOINT_ID`.
 
 ## 2. Common conventions
 
@@ -34,8 +28,8 @@ Content-Type: application/json
 
 ### Request body
 
-Wrap in `{"input": {...}}` and include `action` for inference. Training does
-not need `action` (the train handler only supports `train`).
+Wrap in `{"input": {...}}`. Training does not need `action` because the train
+handler defaults it to `train` and rejects every other value.
 
 ### Response body
 
@@ -49,61 +43,9 @@ not need `action` (the train handler only supports `train`).
 
 Always check **both** `status == "COMPLETED"` and `output.error`.
 
-## 3. Inference — `action: "convert"`
+## 3. Training (`/run`, always async)
 
-```json
-{
-  "input": {
-    "action": "convert",
-    "input_audio": "s3://bucket/voice/source/input.wav",
-    "pth_path": "s3://bucket/voice/model_registry/Applio/logs/<model>/<model>_<n>_best_epoch.pth",
-    "index_path": "s3://bucket/voice/model_registry/Applio/logs/<model>/<model>.index",
-    "output_s3": "s3://bucket/voice/converted/<job>/output.wav",
-    "pitch": 0,
-    "index_rate": 0.75,
-    "volume_envelope": 1.0,
-    "protect": 0.33,
-    "f0_method": "rmvpe",
-    "embedder_model": "contentvec",
-    "export_format": "WAV",
-    "clean_audio": false,
-    "clean_strength": 0.7,
-    "split_audio": false,
-    "f0_autotune": false,
-    "f0_autotune_strength": 1.0,
-    "proposed_pitch": false,
-    "proposed_pitch_threshold": 155.0
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "output": {
-    "message": "File /tmp/.../input.wav inferred successfully.",
-    "output_audio_uri": "s3://.../converted/<job>/output.wav"
-  }
-}
-```
-
-Set `return_base64: true` instead of (or alongside) `output_s3` to receive
-the wav inline:
-
-```json
-{
-  "output": {
-    "message": "...",
-    "audio_base64": "...",
-    "format": "wav"
-  }
-}
-```
-
-## 4. Training (`/run`, always async)
-
-### 4.1 Start
+### 3.1 Start
 
 ```json
 {
@@ -137,7 +79,7 @@ Response (immediate):
 {"id": "<runpod-job-id>", "status": "IN_QUEUE"}
 ```
 
-### 4.2 Poll
+### 3.2 Poll
 
 `GET /v2/<train-endpoint>/status/<job_id>`
 
@@ -175,7 +117,7 @@ Terminal COMPLETED payload:
 }
 ```
 
-### 4.3 Callback
+### 3.3 Callback
 
 If `callback_url` is provided, the worker POSTs on completion (success or
 failure):
@@ -195,7 +137,7 @@ failure):
 }
 ```
 
-## 5. Environment variables (handlers read these)
+## 4. Environment variables
 
 | Key | Default | Purpose |
 |---|---|---|
@@ -205,9 +147,8 @@ failure):
 | `APPLIO_MODEL_REGISTRY_S3` | `s3://shiftup-enterprise-ai-service/voice/model_registry/Applio` | Training upload destination |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_DEFAULT_REGION` | — | S3 access |
 
-## 6. Cold start
+## 5. Cold start
 
-First worker spinup takes 60–120s (image pull + torch load). Keep
-`workersMin >= 1` on the inference endpoint. Training always runs with
-`workersMin = 0` because cold start is negligible compared to a full RVC
+First worker spinup takes 60–120s (image pull + torch load). Training uses
+`workersMin = 0` because the cold start is negligible compared with a full RVC
 run.

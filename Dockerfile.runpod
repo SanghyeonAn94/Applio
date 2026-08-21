@@ -92,4 +92,4 @@ exec "$@"\n\
 ' > /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "-u", "-m", "app.handler"]
+CMD ["python", "-u", "-m", "app.train_handler"]
